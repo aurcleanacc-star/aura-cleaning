@@ -16,3 +16,4 @@ src/generated/
 /uploads
 _whatsapp_auth/
 open-wa-session*.json
+_IGNORE_session/
