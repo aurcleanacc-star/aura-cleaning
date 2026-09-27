@@ -122,7 +122,9 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
         paidAmount: challanPaid,
         balanceAmount: challanBalance,
         notes: notes || order.specialInstructions || null,
-        terms: terms || "Goods once delivered in good condition cannot be returned. Please check garments before signing.",
+        terms:
+          terms ||
+          "No guarantee against colour loss, bleeding & shrinkage.\nIn case of rare damage, the company's liability shall be limited to a maximum of eight (8) times the processing (laundry/dry clean) cost.",
         deliveredByName: deliveredByName || null,
         receivedByName: receivedByName || order.customerName,
         createdById: userId || null,

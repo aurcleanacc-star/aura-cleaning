@@ -9,7 +9,8 @@ import {
   cancelDeliveryChallan,
   getDeliveryChallanById,
 } from "@/lib/services/delivery-challan";
-import { sendWhatsAppMessage, interpolateWhatsAppTemplate } from "@/lib/services/whatsapp";
+import { sendDocumentToWhatsApp, interpolateWhatsAppTemplate } from "@/lib/services/whatsapp";
+import { buildDeliveryChallanHtml } from "@/lib/pdf/delivery-challan-document";
 import type { ChallanStatus, PaymentMethod } from "@/generated/prisma/client";
 
 export async function createDeliveryChallanAction(data: {
@@ -120,26 +121,33 @@ export async function sendChallanWhatsAppAction(challanId: string) {
     }
 
     if (!challan.customerPhone) {
-      throw new Error("Customer phone number is missing on this Delivery Challan.");
+      throw new Error(
+        "Customer WhatsApp number is not available. Update the customer's phone number before sending.",
+      );
     }
 
+    // Deliberately no {{total}}/{{paid}}/{{balance}} — a Delivery Challan
+    // documents garments moving, not money, and must never carry payment
+    // information, on-screen or in the WhatsApp message.
     const messageText = interpolateWhatsAppTemplate(
-      "Hello {{customerName}},\n\nYour AURCLEAN delivery challan for Order {{orderId}} is attached.\n\nChallan No: {{challanNumber}}\nTotal Amount: {{total}}\nPaid: {{paid}}\nBalance: {{balance}}\n\nThank you for choosing AURCLEAN.",
+      "Hello {{customerName}},\n\nPlease find your AURCLEAN Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\nAURCLEAN\nThe Organic Laundry",
       {
         customerName: challan.customerName,
         orderId: challan.order.orderNumber,
         challanNumber: challan.challanNumber,
-        total: Number(challan.grandTotal),
-        paid: Number(challan.paidAmount),
-        balance: Number(challan.balanceAmount),
-        businessName: challan.branch?.name || "AURCLEAN Laundry Management ERP",
+        deliveryDate: challan.deliveryDate ?? challan.expectedDeliveryDate ?? undefined,
       },
     );
 
-    const result = await sendWhatsAppMessage({
+    const html = buildDeliveryChallanHtml(challan);
+
+    const result = await sendDocumentToWhatsApp({
       phone: challan.customerPhone,
       messageType: "DELIVERY_CHALLAN",
       messageText,
+      html,
+      filename: `AURCLEAN-Delivery-Challan-${challan.challanNumber}.pdf`,
+      pdfOptions: { footer: { label: `AURCLEAN • Delivery Challan No: ${challan.challanNumber}` } },
       customerId: challan.customerId || undefined,
       orderId: challan.orderId,
       sentByUserId: session.id,
