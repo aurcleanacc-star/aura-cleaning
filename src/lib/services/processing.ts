@@ -12,6 +12,8 @@ import {
   type ActorContext,
 } from "@/lib/services/garments";
 import { recordGarmentScan } from "@/lib/services/garment-tracking";
+import { notify } from "@/lib/services/notifications";
+import { formatCurrency } from "@/lib/money";
 import type {
   GarmentScanOutcome,
   ProcessingStage,
@@ -58,7 +60,9 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  let orderJustBecameReady = false;
+
+  const result = await prisma.$transaction(async (tx) => {
     const garment = await tx.garment.findUnique({
       where: { id: input.garmentId },
       include: {
@@ -206,12 +210,14 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       garment.orderId,
       input.actor,
     );
+    orderJustBecameReady = orderStatus === "READY" && garment.order.status !== "READY";
 
     const nextTask = garment.tasks.find((t) => t.sequence === task.sequence + 1);
 
     return {
       garmentCode: garment.garmentCode,
       orderNumber: garment.order.orderNumber,
+      orderId: garment.orderId,
       status: garmentStatus,
       stage: effectiveStage,
       nextStage: isTerminalOutcome ? (nextTask?.stage ?? null) : input.stage,
@@ -220,6 +226,39 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       mismatchAlert: scan.alert,
     };
   });
+
+  // Fired after commit, from the one place every station and the batch
+  // scanner's auto-advance both funnel through — so a garment's own scan
+  // reaching the last station notifies the customer exactly like a manual
+  // "Move status → Ready" already did, with no separate wiring per screen.
+  if (orderJustBecameReady) {
+    const order = await prisma.order.findUnique({
+      where: { id: result.orderId },
+      select: {
+        customerName: true,
+        customerPhone: true,
+        customerEmail: true,
+        outstandingAmount: true,
+      },
+    });
+    if (order) {
+      await notify({
+        event: "ORDER_READY",
+        orderId: result.orderId,
+        branchId: input.actor.branchId,
+        recipientName: order.customerName,
+        recipientPhone: order.customerPhone,
+        recipientEmail: order.customerEmail,
+        variables: {
+          customerName: order.customerName,
+          orderNumber: result.orderNumber,
+          outstanding: formatCurrency(order.outstandingAmount),
+        },
+      });
+    }
+  }
+
+  return result;
 }
 
 /** Bulk variant for "scan a pile and press one button" workflows. */

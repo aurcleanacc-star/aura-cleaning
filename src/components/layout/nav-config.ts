@@ -188,12 +188,6 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: [PERMISSIONS.EXPENSE_VIEW],
       },
       {
-        label: "Purchases",
-        href: "/purchases",
-        icon: Boxes,
-        permissions: [PERMISSIONS.PURCHASE_VIEW],
-      },
-      {
         label: "Sales Register",
         href: "/finance/sales",
         icon: ShoppingBag,
