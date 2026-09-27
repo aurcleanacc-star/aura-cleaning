@@ -258,6 +258,7 @@ export interface CustomerProfile {
     paidAmount: number;
     outstandingAmount: number;
   }>;
+  deliveryChallans: Array<any>;
   topServices: Array<{ name: string; pieces: number }>;
 }
 
@@ -280,6 +281,13 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
           totalAmount: true,
           paidAmount: true,
           outstandingAmount: true,
+        },
+      },
+      deliveryChallans: {
+        orderBy: { challanDate: "desc" },
+        take: 50,
+        include: {
+          order: { select: { id: true, orderNumber: true } },
         },
       },
     },
@@ -331,6 +339,12 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
       totalAmount: num(order.totalAmount),
       paidAmount: num(order.paidAmount),
       outstandingAmount: num(order.outstandingAmount),
+    })),
+    deliveryChallans: customer.deliveryChallans.map((dc) => ({
+      ...dc,
+      grandTotal: num(dc.grandTotal),
+      paidAmount: num(dc.paidAmount),
+      balanceAmount: num(dc.balanceAmount),
     })),
     topServices: serviceRows.map((row) => ({
       name: serviceName.get(row.serviceId) ?? "Service",

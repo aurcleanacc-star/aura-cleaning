@@ -21,6 +21,8 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Timeline, type TimelineEntry } from "@/components/shared/timeline";
 import { CopyButton } from "@/components/shared/copy-button";
 import { OrderActions } from "@/app/(app)/orders/[id]/order-actions";
+import { OrderDeliveryChallanSection } from "@/app/(app)/orders/[id]/order-delivery-challan";
+import { WhatsAppButton } from "@/components/whatsapp/whatsapp-button";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime, formatTime } from "@/lib/dates";
@@ -84,6 +86,7 @@ export default async function OrderDetailPage({
       deliveries: { orderBy: { scheduledAt: "desc" }, include: { driver: { include: { user: { select: { name: true } } } } } },
       pickups: { orderBy: { scheduledAt: "desc" }, include: { driver: { include: { user: { select: { name: true } } } } } },
       complaints: { orderBy: { createdAt: "desc" }, select: { id: true, complaintNumber: true, type: true, status: true } },
+      deliveryChallans: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -210,6 +213,25 @@ export default async function OrderDetailPage({
                 <Tag /> Print tag
               </Link>
             </Button>
+            <WhatsAppButton
+              customerName={order.customerName}
+              phone={order.customerPhone}
+              customerId={order.customerId || undefined}
+              orderId={order.id}
+              orderNumber={order.orderNumber}
+              totalAmount={num(order.totalAmount)}
+              paidAmount={num(order.paidAmount)}
+              outstandingAmount={num(order.outstandingAmount)}
+              deliveryDate={order.expectedDeliveryAt}
+              initialType={
+                order.status === "READY"
+                  ? "ORDER_READY"
+                  : num(order.outstandingAmount) > 0
+                  ? "PAYMENT_PENDING"
+                  : "INVOICE"
+              }
+              label="WhatsApp Invoice"
+            />
             {canSeeMoney ? (
               <Button asChild variant="outline">
                 <Link href={`/orders/${order.id}/receipt`}>
@@ -517,6 +539,15 @@ export default async function OrderDetailPage({
               </dl>
             </CardContent>
           </Card>
+
+          <OrderDeliveryChallanSection
+            orderId={order.id}
+            orderNumber={order.orderNumber}
+            customerName={order.customerName}
+            customerPhone={order.customerPhone}
+            challans={order.deliveryChallans || []}
+            canManage={canUpdate}
+          />
 
           {canSeeMoney ? (
             <Card>

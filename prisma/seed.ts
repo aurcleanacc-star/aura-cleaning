@@ -124,6 +124,10 @@ async function clearTransactionalData() {
   await prisma.attendance.deleteMany();
   await prisma.leave.deleteMany();
   await prisma.auditLog.deleteMany();
+  await prisma.staffProfile.deleteMany();
+  await prisma.driver.deleteMany();
+  await prisma.userPermission.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.sequence.deleteMany();
 }
 

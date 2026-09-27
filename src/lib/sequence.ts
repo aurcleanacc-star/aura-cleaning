@@ -41,6 +41,7 @@ export const SEQUENCE_KEYS = {
   SUPPLIER: "supplier",
   EMPLOYEE: "employee",
   CUSTOMER: "customer",
+  DELIVERY_CHALLAN: "delivery_challan",
 } as const;
 
 function pad(value: number, width: number): string {
@@ -138,3 +139,17 @@ export const nextCustomerCode = (db?: Db) =>
   nextDocumentNumber(SEQUENCE_KEYS.CUSTOMER, "CUS", 5, db);
 export const nextEmployeeCode = (db?: Db) =>
   nextDocumentNumber(SEQUENCE_KEYS.EMPLOYEE, "EMP", 4, db);
+export const nextLedgerReference = (db?: Db) =>
+  nextDocumentNumber("financial_ledger", "LED", 6, db);
+export const nextTransferReference = (db?: Db) =>
+  nextDocumentNumber("transfer", "TRF", 6, db);
+export const nextReconciliationReference = (db?: Db) =>
+  nextDocumentNumber("reconciliation", "REC", 6, db);
+
+export const nextChallanNumber = async (db: Db = prisma): Promise<string> => {
+  const year = new Date().getFullYear();
+  const value = await nextSequence(SEQUENCE_KEYS.DELIVERY_CHALLAN, db);
+  return `DC-${year}-${pad(value, 6)}`;
+};
+
+

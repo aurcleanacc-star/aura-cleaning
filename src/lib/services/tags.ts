@@ -123,7 +123,7 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
     orderNumber: order.orderNumber,
     orderQr: buildOrderQrPayload(order.orderNumber),
     orderBarcode: buildBarcodeValue(order.orderNumber),
-    businessName: appName?.value ?? "Aura Laundry",
+    businessName: appName?.value ?? "AURCLEAN Laundry ERP",
     branchName: order.branch.name,
     branchCode: order.branch.code,
     branchPhone: order.branch.phone,

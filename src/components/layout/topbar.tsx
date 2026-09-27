@@ -10,6 +10,8 @@ import { UserMenu } from "@/components/layout/user-menu";
 import type { Alert } from "@/lib/services/alerts";
 import type { UserRole } from "@/generated/prisma/enums";
 
+import { AurcleanLogo } from "@/components/shared/aurclean-logo";
+
 interface TopbarProps {
   name: string;
   email: string;
@@ -40,6 +42,12 @@ export function Topbar({
       >
         <Menu />
       </Button>
+
+      <div className="lg:hidden flex items-center shrink-0 mr-1">
+        <Link href="/dashboard" className="flex items-center">
+          <AurcleanLogo size="sm" variant="full" theme="auto" />
+        </Link>
+      </div>
 
       <div className="flex-1">
         <GlobalSearch />

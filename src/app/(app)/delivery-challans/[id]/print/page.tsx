@@ -1,0 +1,30 @@
+import { notFound } from "next/navigation";
+import { requirePermission } from "@/lib/session";
+import { PERMISSIONS } from "@/lib/rbac";
+import { getDeliveryChallanById } from "@/lib/services/delivery-challan";
+import { ChallanPrintView } from "../../challan-print-view";
+
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps) {
+  const { id } = await params;
+  const challan = await getDeliveryChallanById(id);
+  if (!challan) return { title: "Challan Print View" };
+  return {
+    title: `Print Challan ${challan.challanNumber}`,
+  };
+}
+
+export default async function DeliveryChallanPrintPage({ params }: PageProps) {
+  await requirePermission(PERMISSIONS.DELIVERY_VIEW);
+  const { id } = await params;
+
+  const challan = await getDeliveryChallanById(id);
+  if (!challan) {
+    notFound();
+  }
+
+  return <ChallanPrintView challan={challan} />;
+}

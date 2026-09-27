@@ -3,9 +3,9 @@ import { PERMISSIONS } from "@/lib/rbac";
 import { hasPermission, requirePermission } from "@/lib/session";
 import { listScanHistory } from "@/lib/services/scanning";
 
-import { ScanStation } from "./scan-station";
+import { ScanContainer } from "./scan-container";
 
-export const metadata = { title: "Scan" };
+export const metadata = { title: "Scan & Batch Scan" };
 
 export default async function ScanPage() {
   const user = await requirePermission(PERMISSIONS.GARMENT_SCAN);
@@ -31,10 +31,10 @@ export default async function ScanPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Scan"
-        description="Scan a garment tag to instantly identify it, confirm the owner, update its status and move on to the next one."
+        title="Scan Station & Batch Scanner"
+        description="Scan single garments or run high-speed batch verification for continuous processing, sorting, packing and delivery prep."
       />
-      <ScanStation
+      <ScanContainer
         history={history}
         canUpdateStatus={canUpdateStatus}
         canResolve={hasPermission(user, PERMISSIONS.TRACKING_RESOLVE)}

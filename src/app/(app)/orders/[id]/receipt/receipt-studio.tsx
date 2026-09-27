@@ -303,8 +303,8 @@ function Receipt({ sheet, widthMm }: { sheet: TagSheet; widthMm: number }) {
         <Barcode value={sheet.orderBarcode} height={widthMm >= 70 ? 30 : 24} />
       </div>
 
-      <div style={{ textAlign: "center", fontSize: `${7.5 * k}pt`, marginTop: "1mm" }}>
-        Thank you — please keep this receipt for collection.
+      <div style={{ textAlign: "center", fontSize: `${8 * k}pt`, fontWeight: 600, marginTop: "2mm" }}>
+        Thank you for choosing AURCLEAN
       </div>
     </div>
   );

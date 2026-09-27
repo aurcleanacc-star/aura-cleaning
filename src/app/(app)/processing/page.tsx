@@ -16,7 +16,7 @@ import type { ProcessingStage } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Processing" };
 
-export const stageSlug = (stage: ProcessingStage) =>
+const stageSlug = (stage: ProcessingStage) =>
   stage.toLowerCase().replace(/_/g, "-");
 
 export default async function ProcessingPage({

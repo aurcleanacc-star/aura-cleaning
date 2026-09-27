@@ -74,11 +74,20 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="border-none shadow-xl shadow-black/5">
+    <Card className="border border-emerald-500/20 bg-white/95 shadow-2xl backdrop-blur">
       <CardContent className="pt-6">
-        <form ref={formRef} action={formAction} className="space-y-5">
+        <form ref={formRef} action={formAction} className="space-y-6">
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <input type="hidden" name="accessCode" value={code} />
+
+          <div className="text-center space-y-1">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-700">
+              Enter Access Code
+            </h2>
+            <p className="text-xs text-slate-500">
+              Enter your 6-digit staff security code
+            </p>
+          </div>
 
           {state && !state.ok ? (
             <div className="animate-shake">
@@ -103,16 +112,16 @@ export function LoginForm() {
                 onKeyDown={(event) => handleKeyDown(index, event)}
                 onFocus={(event) => event.target.select()}
                 className={cn(
-                  "h-14 w-11 rounded-xl border border-input bg-background text-center text-2xl font-semibold tracking-widest shadow-sm transition-all",
-                  "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30",
-                  digit && "border-primary/60",
+                  "h-14 w-11 rounded-xl border border-slate-200 bg-slate-50/50 text-center text-2xl font-bold tracking-widest text-slate-900 shadow-sm transition-all",
+                  "focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                  digit && "border-emerald-600 bg-emerald-50/30 text-emerald-950",
                 )}
                 aria-label={`Digit ${index + 1}`}
               />
             ))}
           </div>
 
-          <SubmitButton className="h-12 w-full text-base" disabled={!complete}>
+          <SubmitButton className="h-12 w-full text-base bg-[#0a3b2c] hover:bg-[#06261c] text-white shadow-lg shadow-emerald-950/20" disabled={!complete}>
             Continue
           </SubmitButton>
         </form>

@@ -1,14 +1,31 @@
 import {
+  Activity,
+  ArrowDownLeft,
+  ArrowUpRight,
   Boxes,
+  Building2,
   ClipboardList,
+  Cpu,
+  DollarSign,
+  Download,
   FileBarChart,
+  FileSpreadsheet,
+  FileText,
+  Grid,
+  Layers,
   LayoutDashboard,
+  MessageSquare,
   Receipt,
-  Shapes,
+  Scale,
   ScanLine,
   Settings,
+  Shapes,
   Shirt,
+  ShoppingBag,
+  Tag,
+  Truck,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,12 +47,12 @@ export interface NavSection {
 }
 
 /**
- * The whole sidebar, in the order it appears. Kept to exactly the modules the
- * business runs on day to day — every other page in the app is still reachable
- * by URL, but nothing beyond this list gets a permanent menu entry.
+ * Real-world Complete Laundry ERP Navigation Structure.
+ * Structured into Operations, Finance, Inventory, and Management.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
+    label: "OPERATIONS",
     items: [
       {
         label: "Dashboard",
@@ -44,11 +61,6 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: [PERMISSIONS.DASHBOARD_VIEW],
         exact: true,
       },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
       {
         label: "Orders",
         href: "/orders",
@@ -59,13 +71,13 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Garments",
         href: "/garments",
         icon: Shirt,
-        permissions: [PERMISSIONS.GARMENT_VIEW, PERMISSIONS.GARMENT_SCAN],
+        permissions: [PERMISSIONS.GARMENT_VIEW],
       },
       {
         label: "Categories",
-        href: "/tracking",
+        href: "/categories",
         icon: Shapes,
-        permissions: [PERMISSIONS.TRACKING_VIEW],
+        permissions: [PERMISSIONS.GARMENT_VIEW, PERMISSIONS.CATALOGUE_MANAGE],
       },
       {
         label: "Customers",
@@ -74,44 +86,189 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: [PERMISSIONS.CUSTOMER_VIEW],
       },
       {
-        label: "Scan",
+        label: "Services & Pricing",
+        href: "/services",
+        icon: Tag,
+        permissions: [PERMISSIONS.CATALOGUE_MANAGE, PERMISSIONS.ORDER_VIEW],
+      },
+      {
+        label: "Processing",
+        href: "/processing",
+        icon: Cpu,
+        permissions: [PERMISSIONS.PROCESSING_VIEW],
+      },
+      {
+        label: "Scan Station",
         href: "/scan",
         icon: ScanLine,
         permissions: [PERMISSIONS.GARMENT_SCAN],
       },
+      {
+        label: "Batch Scan",
+        href: "/scan?mode=batch",
+        icon: Layers,
+        permissions: [PERMISSIONS.GARMENT_SCAN],
+      },
+      {
+        label: "Delivery",
+        href: "/delivery",
+        icon: Truck,
+        permissions: [PERMISSIONS.DELIVERY_VIEW],
+      },
+      {
+        label: "Delivery Challans",
+        href: "/delivery-challans",
+        icon: FileText,
+        permissions: [PERMISSIONS.DELIVERY_VIEW],
+      },
     ],
   },
   {
-    label: "Business",
+    label: "FINANCE",
     items: [
       {
-        label: "Payments",
+        label: "Financial Overview",
+        href: "/finance",
+        icon: DollarSign,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+        exact: true,
+      },
+      {
+        label: "Business Ledger",
+        href: "/finance/ledger",
+        icon: FileSpreadsheet,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Incoming Money",
+        href: "/finance/incoming",
+        icon: ArrowDownLeft,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Outgoing Money",
+        href: "/finance/outgoing",
+        icon: ArrowUpRight,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Cash in Hand",
+        href: "/finance/cash",
+        icon: Wallet,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Bank Accounts",
+        href: "/finance/bank-accounts",
+        icon: Building2,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Customer Receivables",
+        href: "/finance/receivables",
+        icon: ArrowDownLeft,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Supplier Payables",
+        href: "/finance/payables",
+        icon: ArrowUpRight,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Payments & Invoices",
         href: "/billing",
         icon: Receipt,
         permissions: [PERMISSIONS.BILLING_VIEW],
       },
       {
-        label: "Inventory",
+        label: "Expenses",
+        href: "/expenses",
+        icon: Wallet,
+        permissions: [PERMISSIONS.EXPENSE_VIEW],
+      },
+      {
+        label: "Purchases",
+        href: "/purchases",
+        icon: Boxes,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
+      },
+      {
+        label: "Sales Register",
+        href: "/finance/sales",
+        icon: ShoppingBag,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+      {
+        label: "Financial Reports & P&L",
+        href: "/finance/reports",
+        icon: FileBarChart,
+        permissions: [PERMISSIONS.REPORT_VIEW],
+      },
+      {
+        label: "Reconciliation",
+        href: "/finance/reconciliation",
+        icon: Scale,
+        permissions: [PERMISSIONS.FINANCE_VIEW],
+      },
+    ],
+  },
+  {
+    label: "INVENTORY",
+    items: [
+      {
+        label: "Consumables Inventory",
         href: "/inventory",
         icon: Boxes,
         permissions: [PERMISSIONS.INVENTORY_VIEW],
       },
       {
-        label: "Staff",
+        label: "Suppliers",
+        href: "/purchases/suppliers",
+        icon: Users,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
+      },
+      {
+        label: "Purchase Orders",
+        href: "/purchases",
+        icon: ClipboardList,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
+      },
+    ],
+  },
+  {
+    label: "MANAGEMENT",
+    items: [
+      {
+        label: "Staff Directory",
         href: "/staff",
         icon: Users,
         permissions: [PERMISSIONS.STAFF_VIEW],
       },
       {
-        label: "Reports",
+        label: "Operational Reports",
         href: "/reports",
         icon: FileBarChart,
         permissions: [PERMISSIONS.REPORT_VIEW],
       },
-    ],
-  },
-  {
-    items: [
+      {
+        label: "System Activity Log",
+        href: "/activity-log",
+        icon: Activity,
+        permissions: [PERMISSIONS.AUDIT_VIEW],
+      },
+      {
+        label: "Import / Export",
+        href: "/management/import-export",
+        icon: Download,
+        permissions: [PERMISSIONS.DATA_IMPORT_EXPORT],
+      },
+      {
+        label: "WhatsApp Gateway",
+        href: "/settings/whatsapp",
+        icon: MessageSquare,
+        permissions: [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.NOTIFICATION_VIEW],
+      },
       {
         label: "Settings",
         href: "/settings",

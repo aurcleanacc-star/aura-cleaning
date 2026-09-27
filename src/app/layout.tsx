@@ -6,17 +6,17 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Aura Laundry ERP",
-    template: "%s · Aura Laundry ERP",
+    default: "AURCLEAN — Laundry Management ERP",
+    template: "%s · AURCLEAN ERP",
   },
   description:
-    "Laundry operating system built around Order → Garment → Processing → Location → Delivery → Payment.",
+    "AURCLEAN Real-Time Laundry Operating System & Business Management ERP.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#1e293b",
+  themeColor: "#0a3b2c",
 };
 
 export default function RootLayout({

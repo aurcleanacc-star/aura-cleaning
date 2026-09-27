@@ -17,6 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { AurcleanLogo } from "@/components/shared/aurclean-logo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/shared/filter-bar";
@@ -43,6 +44,7 @@ import {
   servicePerformance,
   stagePipeline,
 } from "@/lib/services/analytics";
+import { getFinancialOverview } from "@/lib/services/accounting";
 import { detectMismatches } from "@/lib/services/garment-tracking";
 import { PERMISSIONS } from "@/lib/rbac";
 import { hasPermission, requirePermission } from "@/lib/session";
@@ -99,6 +101,7 @@ export default async function DashboardPage({
     recentOrders,
     branchStats,
     mismatchFindings,
+    financialOverview,
   ] = await Promise.all([
     dashboardMetrics(filters),
     revenueSeries(filters),
@@ -131,6 +134,7 @@ export default async function DashboardPage({
     }),
     canSeeAllBranches ? branchPerformance(range) : Promise.resolve([]),
     detectMismatches({ branchIds: branchId ? [branchId] : null }),
+    canSeeMoney ? getFinancialOverview(branchId) : Promise.resolve(null),
   ]);
 
   const mismatchCount = mismatchFindings.length;
@@ -148,16 +152,40 @@ export default async function DashboardPage({
   return (
     <div className="space-y-5">
       <LiveRefresh intervalMs={20000} />
-      <PageHeader
-        title="Dashboard"
-        description={`${formatDate(range.from)} – ${formatDate(range.to)}${user.branchName && !canSeeAllBranches ? ` · ${user.branchName}` : ""}`}
-        actions={
-          hasPermission(user, PERMISSIONS.ORDER_CREATE) ? (
-            <Button asChild>
-              <Link href="/orders/new">New order</Link>
+      
+      {/* AURCLEAN ERP Branded Welcome Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-900/10 bg-gradient-to-r from-[#06261c] via-[#0a3b2c] to-[#0d4a38] p-5 text-white shadow-lg">
+        <div className="absolute right-0 top-0 -mr-12 -mt-12 size-56 rounded-full bg-emerald-400/10 blur-2xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex items-center justify-center p-2 rounded-2xl bg-emerald-500/15 border border-emerald-400/25 backdrop-blur-sm shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+              <AurcleanLogo size="lg" variant="icon" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight text-white">
+                  Welcome to AURCLEAN ERP
+                </h1>
+                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-400/30">
+                  {user.role}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-200/80 mt-0.5">
+                Real-time Laundry Operations & Financial Management System
+              </p>
+            </div>
+          </div>
+          {hasPermission(user, PERMISSIONS.ORDER_CREATE) ? (
+            <Button asChild className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-md">
+              <Link href="/orders/new">+ New Order</Link>
             </Button>
-          ) : null
-        }
+          ) : null}
+        </div>
+      </div>
+
+      <PageHeader
+        title="Operations Overview"
+        description={`${formatDate(range.from)} – ${formatDate(range.to)}${user.branchName && !canSeeAllBranches ? ` · ${user.branchName}` : ""}`}
       />
 
       {quickActions.length > 0 ? (
@@ -270,29 +298,78 @@ export default async function DashboardPage({
         />
       </section>
 
-      {canSeeMoney ? (
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard
-            label="Today's revenue"
-            value={formatCurrency(metrics.todayRevenue)}
-            icon={Wallet}
-            tone="success"
-          />
-          <StatCard
-            label="Pending payments"
-            value={formatCurrency(metrics.pendingPayments)}
-            icon={Banknote}
-            tone={metrics.pendingPayments > 0 ? "warning" : "default"}
-            href="/billing?tab=outstanding"
-          />
-          <StatCard
-            label="Low stock items"
-            value={metrics.lowStock}
-            icon={metrics.lowStock > 0 ? AlertTriangle : Boxes}
-            tone={metrics.lowStock > 0 ? "danger" : "default"}
-            href="/inventory?tab=low"
-          />
-        </section>
+      {canSeeMoney && financialOverview ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Financial Overview
+            </h3>
+            <Link
+              href="/finance"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Open Financial Dashboard →
+            </Link>
+          </div>
+          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+            <StatCard
+              label="Today's Incoming"
+              value={formatCurrency(financialOverview.todayIncoming)}
+              icon={Wallet}
+              tone="success"
+              href="/finance/incoming"
+            />
+            <StatCard
+              label="Today's Outgoing"
+              value={formatCurrency(financialOverview.todayOutgoing)}
+              icon={Banknote}
+              tone="danger"
+              href="/finance/outgoing"
+            />
+            <StatCard
+              label="Net Today"
+              value={formatCurrency(financialOverview.netToday)}
+              icon={Wallet}
+              tone={financialOverview.netToday >= 0 ? "success" : "danger"}
+              href="/finance/reports"
+            />
+            <StatCard
+              label="Cash in Hand"
+              value={formatCurrency(financialOverview.cashInHand)}
+              icon={Wallet}
+              tone="info"
+              href="/finance/cash"
+            />
+            <StatCard
+              label="Bank Balance"
+              value={formatCurrency(financialOverview.bankBalance)}
+              icon={Wallet}
+              tone="info"
+              href="/finance/bank-accounts"
+            />
+            <StatCard
+              label="Receivables"
+              value={formatCurrency(financialOverview.customerReceivables)}
+              icon={Wallet}
+              tone={financialOverview.customerReceivables > 0 ? "warning" : "default"}
+              href="/finance/receivables"
+            />
+            <StatCard
+              label="Payables"
+              value={formatCurrency(financialOverview.supplierPayables)}
+              icon={Banknote}
+              tone={financialOverview.supplierPayables > 0 ? "danger" : "default"}
+              href="/finance/payables"
+            />
+            <StatCard
+              label="Low Stock"
+              value={metrics.lowStock}
+              icon={metrics.lowStock > 0 ? AlertTriangle : Boxes}
+              tone={metrics.lowStock > 0 ? "danger" : "default"}
+              href="/inventory?tab=low"
+            />
+          </section>
+        </div>
       ) : null}
 
       {canSeeMoney ? (

@@ -105,6 +105,13 @@ export const PERMISSIONS = {
   CATALOGUE_MANAGE: "catalogue.manage",
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_VIEW: "audit.view",
+
+  // Finance ERP Engine
+  FINANCE_VIEW: "finance.view",
+  FINANCE_MANAGE: "finance.manage",
+  BANK_MANAGE: "bank.manage",
+  RECONCILE_MANAGE: "reconcile.manage",
+  DATA_IMPORT_EXPORT: "data.import_export",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -205,6 +212,12 @@ const MANAGER_PERMISSIONS: PermissionCode[] = [
   P.EXPENSE_VIEW,
   P.EXPENSE_MANAGE,
   P.EXPENSE_APPROVE,
+
+  P.FINANCE_VIEW,
+  P.FINANCE_MANAGE,
+  P.BANK_MANAGE,
+  P.RECONCILE_MANAGE,
+  P.DATA_IMPORT_EXPORT,
 
   // Deliberately excluded: BRANCH_MANAGE, CATALOGUE_MANAGE, SETTINGS_MANAGE,
   // AUDIT_VIEW, RBAC_MANAGE — sensitive system/RBAC settings stay with Super Admin.

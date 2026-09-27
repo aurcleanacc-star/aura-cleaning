@@ -27,7 +27,8 @@ import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/sess
 import { getCustomerProfile } from "@/lib/services/customers";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import type { OrderStatus } from "@/generated/prisma/enums";
-
+import { getWhatsAppHistory } from "@/lib/services/whatsapp";
+import { WhatsAppButton } from "@/components/whatsapp/whatsapp-button";
 import { DeleteCustomerButton, EditCustomerDialog } from "../customer-dialogs";
 
 export const metadata = { title: "Customer" };
@@ -45,6 +46,7 @@ export default async function CustomerProfilePage({
   assertBranchAccess(user, customer.branchId);
 
   const canBook = hasPermission(user, PERMISSIONS.ORDER_CREATE);
+  const waHistory = await getWhatsAppHistory({ customerId: id });
 
   const columns: Column<(typeof customer.orders)[number]>[] = [
     {
@@ -130,6 +132,12 @@ export default async function CustomerProfilePage({
                 <ArrowLeft />
               </Link>
             </Button>
+            <WhatsAppButton
+              customerName={customer.name}
+              phone={customer.phone}
+              customerId={customer.id}
+              label="WhatsApp Customer"
+            />
             {hasPermission(user, PERMISSIONS.CUSTOMER_MANAGE) ? (
               <EditCustomerDialog
                 customer={{
@@ -278,7 +286,161 @@ export default async function CustomerProfilePage({
             />
           </CardContent>
         </Card>
+
+        {/* Delivery Challans */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Delivery Challans</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DataTable
+              columns={[
+                {
+                  key: "challanNumber",
+                  header: "Challan No",
+                  cell: (row: any) => (
+                    <Link
+                      href={`/delivery-challans/${row.id}`}
+                      className="font-mono text-sm font-bold text-emerald-700 hover:underline"
+                    >
+                      {row.challanNumber}
+                    </Link>
+                  ),
+                },
+                {
+                  key: "orderNumber",
+                  header: "Order No",
+                  cell: (row: any) => (
+                    <Link
+                      href={`/orders/${row.orderId}`}
+                      className="font-mono text-sm text-slate-800 hover:underline"
+                    >
+                      {row.order?.orderNumber}
+                    </Link>
+                  ),
+                },
+                {
+                  key: "challanDate",
+                  header: "Date",
+                  cell: (row: any) => (
+                    <span className="text-sm text-muted-foreground">{formatDate(row.challanDate)}</span>
+                  ),
+                },
+                {
+                  key: "grandTotal",
+                  header: "Amount",
+                  className: "text-right",
+                  headerClassName: "text-right",
+                  cell: (row: any) => (
+                    <span className="text-sm font-bold numeric">{formatCurrency(row.grandTotal)}</span>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "Status",
+                  cell: (row: any) => (
+                    <StatusBadge
+                      status={row.status}
+                      label={row.status.replace(/_/g, " ")}
+                    />
+                  ),
+                },
+              ]}
+              rows={(customer as any).deliveryChallans || []}
+              getRowKey={(row: any) => row.id}
+              empty={
+                <EmptyState
+                  icon={ClipboardList}
+                  title="No delivery challans generated"
+                  description="Delivery challans generated for this customer will be listed here."
+                />
+              }
+            />
+          </CardContent>
+        </Card>
       </div>
+
+      {/* WhatsApp Communication History */}
+      <Card>
+        <CardHeader className="pb-3 flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            WhatsApp Communication History
+          </CardTitle>
+          <WhatsAppButton
+            customerName={customer.name}
+            phone={customer.phone}
+            customerId={customer.id}
+            label="Send WhatsApp"
+          />
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={[
+              {
+                key: "sentAt",
+                header: "Date & Time",
+                cell: (row) => (
+                  <span className="text-xs text-muted-foreground">{formatDateTime(row.sentAt)}</span>
+                ),
+              },
+              {
+                key: "messageType",
+                header: "Message Type",
+                cell: (row) => (
+                  <Badge tone="neutral" className="text-xs font-mono">
+                    {row.messageType}
+                  </Badge>
+                ),
+              },
+              {
+                key: "document",
+                header: "Document",
+                cell: (row) => (
+                  <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                    {row.documentName || "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                cell: (row) => (
+                  <Badge
+                    tone={
+                      row.status === "DELIVERED" || row.status === "READ"
+                        ? "success"
+                        : row.status === "SENT"
+                        ? "info"
+                        : "danger"
+                    }
+                    className="text-[10px]"
+                  >
+                    ✓ {row.status}
+                  </Badge>
+                ),
+              },
+              {
+                key: "sentBy",
+                header: "Sent By",
+                cell: (row) => (
+                  <span className="text-xs text-muted-foreground">
+                    {row.sentByUser?.name || "System"}
+                  </span>
+                ),
+              },
+            ]}
+            rows={waHistory}
+            getRowKey={(row) => row.id}
+            empty={
+              <EmptyState
+                icon={ClipboardList}
+                title="No WhatsApp messages sent yet"
+                description="Use the WhatsApp button above to send invoices, receipts, and order updates."
+              />
+            }
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

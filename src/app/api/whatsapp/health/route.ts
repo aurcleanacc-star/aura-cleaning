@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { getWhatsAppStatus } from "@/lib/services/whatsapp";
+
+/**
+ * Health Check API for WhatsApp Integration
+ * Returns health status of ERP database, OpenWA Gateway service, and active Session
+ */
+export async function GET() {
+  try {
+    const health = await getWhatsAppStatus({ forceRefresh: true });
+    const status = health.erpOk && health.openWaOk ? 200 : 503;
+    return NextResponse.json(health, { status });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        erpOk: false,
+        openWaOk: false,
+        error: error instanceof Error ? error.message : "ERP Health Check Failed",
+      },
+      { status: 500 },
+    );
+  }
+}

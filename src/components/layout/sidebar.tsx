@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Shirt, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { visibleSections, type NavItem } from "@/components/layout/nav-config";
 import type { PermissionCode } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
+import { AurcleanLogo } from "@/components/shared/aurclean-logo";
 
 interface SidebarProps {
   permissions: PermissionCode[];
@@ -27,7 +28,7 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
     <>
       {open ? (
         <div
-          className="animate-fade-in-soft fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
+          className="animate-fade-in-soft fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={onClose}
           aria-hidden
         />
@@ -35,25 +36,22 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#06261c] text-emerald-50 transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] lg:translate-x-0 border-r border-emerald-900/60 shadow-xl",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sidebar-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Shirt className="size-4" aria-hidden />
-            </span>
-            <span className="text-sm tracking-tight">Aura Laundry ERP</span>
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-emerald-900/60 px-4 bg-[#041d15]">
+          <Link href="/dashboard" className="flex items-center gap-2.5 rounded-xl px-1 py-1 transition-all duration-200 hover:opacity-90">
+            <AurcleanLogo size="md" variant="full" showSubtitle subtitleText="LAUNDRY ERP" theme="dark" />
           </Link>
           <Button
             variant="ghost"
             size="icon-sm"
-            className="text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
+            className="text-emerald-300 hover:bg-emerald-900/60 hover:text-white lg:hidden"
             onClick={onClose}
             aria-label="Close navigation"
           >
-            <X />
+            <X className="size-4" />
           </Button>
         </div>
 
@@ -61,7 +59,7 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
           {sections.map((section, index) => (
             <div key={section.label ?? `section-${index}`} className="space-y-1">
               {section.label ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted">
+                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400/80">
                   {section.label}
                 </p>
               ) : null}
@@ -70,9 +68,9 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="border-t border-sidebar-border px-4 py-3">
-          <p className="text-[11px] text-sidebar-muted">
-            Garment → Customer → Order → Category → Status
+        <div className="border-t border-emerald-900/60 px-4 py-3 bg-[#041d15]/50">
+          <p className="text-[11px] font-medium text-emerald-300/70">
+            AURCLEAN ERP · Connected Ledger
           </p>
         </div>
       </aside>
@@ -100,20 +98,23 @@ function NavGroup({
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-[background-color,color,padding] duration-200",
+                "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200",
                 active
-                  ? "bg-sidebar-accent font-medium text-sidebar-foreground"
-                  : "text-sidebar-muted hover:bg-sidebar-accent/60 hover:pl-4 hover:text-sidebar-foreground",
+                  ? "bg-emerald-800/60 font-semibold text-white shadow-sm shadow-emerald-950/40"
+                  : "text-emerald-100/70 hover:bg-emerald-900/40 hover:text-white hover:pl-3.5",
               )}
             >
               {active ? (
                 <span
-                  className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary"
+                  className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-emerald-400 shadow-[0_0_8px_#34d399]"
                   aria-hidden
                 />
               ) : null}
               <item.icon
-                className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110"
+                className={cn(
+                  "size-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
+                  active ? "text-emerald-400" : "text-emerald-200/60 group-hover:text-emerald-300",
+                )}
                 aria-hidden
               />
               <span className="truncate">{item.label}</span>
