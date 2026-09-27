@@ -27,6 +27,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { updateChallanStatusAction, cancelChallanAction, sendChallanWhatsAppAction } from "../actions";
+import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import type { ChallanStatus, PaymentMethod } from "@/generated/prisma/client";
 
 interface ChallanItem {
@@ -82,7 +83,6 @@ interface Props {
 export function ChallanDetailsClient({ challan }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [sendingWa, setSendingWa] = useState(false);
 
   const [deliverModalOpen, setDeliverModalOpen] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -159,22 +159,6 @@ export function ChallanDetailsClient({ challan }: Props) {
     }
   };
 
-  const handleWhatsApp = async () => {
-    setSendingWa(true);
-    try {
-      const res = await sendChallanWhatsAppAction(challan.id);
-      if (res.success) {
-        toast.success(`Delivery Challan sent to ${challan.customerPhone} via WhatsApp!`);
-      } else {
-        toast.error(res.error || "Failed to send WhatsApp message");
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "WhatsApp delivery error");
-    } finally {
-      setSendingWa(false);
-    }
-  };
-
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       {/* Header */}
@@ -201,15 +185,15 @@ export function ChallanDetailsClient({ challan }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/delivery-challans/${challan.id}/print`}>
-              <Printer /> Print / PDF
-            </Link>
-          </Button>
-
-          <Button onClick={handleWhatsApp} loading={sendingWa} variant="outline" size="sm">
-            <Send /> WhatsApp Challan
-          </Button>
+          <DocumentActionBar
+            documentType="DELIVERY_CHALLAN"
+            documentId={challan.id}
+            documentNumber={challan.challanNumber}
+            customerPhone={challan.customerPhone}
+            customerName={challan.customerName}
+            orderNumber={challan.order.orderNumber}
+            pdfUrl={`/api/documents/pdf?type=DELIVERY_CHALLAN&id=${challan.id}`}
+          />
 
           {challan.status === "GENERATED" ? (
             <Button onClick={handleMarkReady} loading={loading} size="sm">

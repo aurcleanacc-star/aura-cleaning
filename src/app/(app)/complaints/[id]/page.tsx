@@ -28,8 +28,8 @@ export default async function ComplaintDetailPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.COMPLAINT_VIEW);
 
-  const complaint = await prisma.complaint.findUnique({
-    where: { id },
+  const complaint = await prisma.complaint.findFirst({
+    where: { OR: [{ id }, { complaintNumber: id }] },
     include: {
       branch: { select: { name: true } },
       order: {

@@ -263,8 +263,15 @@ export interface CustomerProfile {
 }
 
 export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+  const normPhone = normalisePhone(id);
+  const customer = await prisma.customer.findFirst({
+    where: {
+      OR: [
+        { id },
+        { code: id },
+        ...(normPhone ? [{ phone: normPhone }] : []),
+      ],
+    },
     include: {
       branch: { select: { name: true } },
       orders: {

@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
@@ -27,8 +28,8 @@ export default async function PaymentDetailPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.BILLING_VIEW);
 
-  const payment = await prisma.payment.findUnique({
-    where: { id },
+  const payment = await prisma.payment.findFirst({
+    where: { OR: [{ id }, { paymentNumber: id }] },
     include: {
       branch: { select: { name: true, code: true } },
       receivedBy: { select: { name: true } },
@@ -67,19 +68,21 @@ export default async function PaymentDetailPage({
         title={payment.paymentNumber}
         description={`${humanize(payment.method)} · ${formatDateTime(payment.paidAt)} · ${payment.branch.name}`}
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="icon" aria-label="Back to billing">
               <Link href="/billing?tab=payments">
                 <ArrowLeft />
               </Link>
             </Button>
-            {payment.order ? (
-              <Button asChild variant="outline">
-                <Link href={`/orders/${payment.order.id}/receipt`}>
-                  <Printer /> Receipt
-                </Link>
-              </Button>
-            ) : null}
+            <DocumentActionBar
+              documentType="PAYMENT_RECEIPT"
+              documentId={payment.id}
+              documentNumber={payment.paymentNumber}
+              customerPhone={payment.order?.customerPhone}
+              customerName={payment.order?.customerName}
+              orderNumber={payment.order?.orderNumber}
+              pdfUrl={`/api/documents/pdf?type=PAYMENT_RECEIPT&id=${payment.id}`}
+            />
             {hasPermission(user, PERMISSIONS.BILLING_REFUND) &&
             payment.state === "CAPTURED" &&
             payment.refunds.length === 0 ? (
@@ -89,7 +92,7 @@ export default async function PaymentDetailPage({
                 amount={formatCurrency(payment.amount)}
               />
             ) : null}
-          </>
+          </div>
         }
       />
 

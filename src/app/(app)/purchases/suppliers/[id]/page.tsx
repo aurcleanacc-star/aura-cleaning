@@ -37,8 +37,8 @@ export default async function SupplierDetailPage({
   const user = await requirePermission(PERMISSIONS.PURCHASE_VIEW);
 
   // `city` and `pincode` are not on Supplier; the address line carries them.
-  const supplier = await prisma.supplier.findUnique({
-    where: { id },
+  const supplier = await prisma.supplier.findFirst({
+    where: { OR: [{ id }, { code: id }] },
     include: {
       purchaseOrders: {
         orderBy: { orderDate: "desc" },

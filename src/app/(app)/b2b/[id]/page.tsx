@@ -35,8 +35,8 @@ export default async function B2BAccountPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.B2B_VIEW);
 
-  const account = await prisma.b2BAccount.findUnique({
-    where: { id },
+  const account = await prisma.b2BAccount.findFirst({
+    where: { OR: [{ id }, { code: id }] },
     include: {
       branch: { select: { name: true } },
       contracts: {

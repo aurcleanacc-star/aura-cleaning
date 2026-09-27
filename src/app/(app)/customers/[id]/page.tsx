@@ -29,6 +29,7 @@ import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import type { OrderStatus } from "@/generated/prisma/enums";
 import { getWhatsAppHistory } from "@/lib/services/whatsapp";
 import { WhatsAppButton } from "@/components/whatsapp/whatsapp-button";
+import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import { DeleteCustomerButton, EditCustomerDialog } from "../customer-dialogs";
 
 export const metadata = { title: "Customer" };
@@ -132,11 +133,13 @@ export default async function CustomerProfilePage({
                 <ArrowLeft />
               </Link>
             </Button>
-            <WhatsAppButton
+            <DocumentActionBar
+              documentType="STATEMENT"
+              documentId={customer.id}
+              documentNumber={`STATEMENT-${customer.name.replace(/\s+/g, "")}`}
+              customerPhone={customer.phone}
               customerName={customer.name}
-              phone={customer.phone}
-              customerId={customer.id}
-              label="WhatsApp Customer"
+              pdfUrl={`/api/documents/pdf?type=STATEMENT&id=${customer.id}`}
             />
             {hasPermission(user, PERMISSIONS.CUSTOMER_MANAGE) ? (
               <EditCustomerDialog

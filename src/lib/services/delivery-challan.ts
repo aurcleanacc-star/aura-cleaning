@@ -279,8 +279,8 @@ export async function getDeliveryChallans(params: GetDeliveryChallansParams = {}
  * Fetches complete details of a single Delivery Challan by ID.
  */
 export async function getDeliveryChallanById(id: string) {
-  const challan = await prisma.deliveryChallan.findUnique({
-    where: { id },
+  const challan = await prisma.deliveryChallan.findFirst({
+    where: { OR: [{ id }, { challanNumber: id }] },
     include: {
       branch: true,
       customer: true,

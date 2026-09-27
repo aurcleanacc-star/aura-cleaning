@@ -40,8 +40,8 @@ export default async function StaffDetailPage({
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const staff = await prisma.user.findUnique({
-    where: { id },
+  const staff = await prisma.user.findFirst({
+    where: { OR: [{ id }, { phone: id }, { email: id }] },
     include: {
       branch: { select: { name: true, code: true } },
       staffProfile: { include: { shift: { select: { name: true, startTime: true, endTime: true } } } },

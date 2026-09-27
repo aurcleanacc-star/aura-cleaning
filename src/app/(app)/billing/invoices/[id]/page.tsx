@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PrintButton } from "@/components/shared/print-button";
+import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import { QrCode } from "@/components/shared/code-image";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
@@ -24,8 +25,8 @@ export default async function InvoicePage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.BILLING_VIEW);
 
-  const invoice = await prisma.invoice.findUnique({
-    where: { id },
+  const invoice = await prisma.invoice.findFirst({
+    where: { OR: [{ id }, { invoiceNumber: id }] },
     include: {
       branch: true,
       order: { select: { id: true, orderNumber: true, totalPieces: true, expectedDeliveryAt: true } },
@@ -58,13 +59,21 @@ export default async function InvoicePage({
             {invoice.issuedBy ? ` by ${invoice.issuedBy.name}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline">
             <Link href={invoice.order ? `/orders/${invoice.order.id}` : "/billing"}>
               <ArrowLeft /> Back
             </Link>
           </Button>
-          <PrintButton label="Print invoice" />
+          <DocumentActionBar
+            documentType="INVOICE"
+            documentId={invoice.id}
+            documentNumber={invoice.invoiceNumber}
+            customerPhone={invoice.billToPhone ?? undefined}
+            customerName={invoice.billToName ?? undefined}
+            orderNumber={invoice.order?.orderNumber}
+            pdfUrl={`/api/documents/pdf?type=INVOICE&id=${invoice.id}`}
+          />
         </div>
       </div>
 

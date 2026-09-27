@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   ChevronRight,
+  FileText,
   ScrollText,
   Shirt,
   Wallet,
@@ -24,6 +25,13 @@ const SECTIONS: {
   icon: typeof Building2;
   permission: PermissionCode;
 }[] = [
+  {
+    href: "/settings/documents",
+    title: "Document & PDF Branding",
+    description: "Company details, GSTIN, prefixes, terms & PDF footers",
+    icon: FileText,
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+  },
   {
     href: "/settings/branches",
     title: "Branches",

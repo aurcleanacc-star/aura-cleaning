@@ -52,8 +52,8 @@ export default async function InventoryItemPage({
     ? {}
     : { branchId: user.branchId ?? "__none__" };
 
-  const item = await prisma.inventoryItem.findUnique({
-    where: { id },
+  const item = await prisma.inventoryItem.findFirst({
+    where: { OR: [{ id }, { sku: id }] },
     include: {
       stocks: {
         where: branchFilter,
