@@ -22,7 +22,7 @@ import { Timeline, type TimelineEntry } from "@/components/shared/timeline";
 import { CopyButton } from "@/components/shared/copy-button";
 import { OrderActions } from "@/app/(app)/orders/[id]/order-actions";
 import { OrderDeliveryChallanSection } from "@/app/(app)/orders/[id]/order-delivery-challan";
-import { WhatsAppButton } from "@/components/whatsapp/whatsapp-button";
+import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime, formatTime } from "@/lib/dates";
@@ -57,8 +57,8 @@ export default async function OrderDetailPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.ORDER_VIEW);
 
-  const order = await prisma.order.findUnique({
-    where: { id },
+  const order = await prisma.order.findFirst({
+    where: { OR: [{ id }, { orderNumber: id }] },
     include: {
       branch: { select: { id: true, name: true, code: true } },
       b2bAccount: { select: { id: true, businessName: true, code: true } },
@@ -202,7 +202,7 @@ export default async function OrderDetailPage({
         title={order.orderNumber}
         description={`${order.totalPieces} garments · booked ${formatDateTime(order.placedAt)}${order.createdBy ? ` by ${order.createdBy.name}` : ""}`}
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="icon" aria-label="Back to orders">
               <Link href="/orders">
                 <ArrowLeft />
@@ -213,24 +213,14 @@ export default async function OrderDetailPage({
                 <Tag /> Print tag
               </Link>
             </Button>
-            <WhatsAppButton
+            <DocumentActionBar
+              documentType="ORDER_SUMMARY"
+              documentId={order.id}
+              documentNumber={order.orderNumber}
+              customerPhone={order.customerPhone}
               customerName={order.customerName}
-              phone={order.customerPhone}
-              customerId={order.customerId || undefined}
-              orderId={order.id}
               orderNumber={order.orderNumber}
-              totalAmount={num(order.totalAmount)}
-              paidAmount={num(order.paidAmount)}
-              outstandingAmount={num(order.outstandingAmount)}
-              deliveryDate={order.expectedDeliveryAt}
-              initialType={
-                order.status === "READY"
-                  ? "ORDER_READY"
-                  : num(order.outstandingAmount) > 0
-                  ? "PAYMENT_PENDING"
-                  : "INVOICE"
-              }
-              label="WhatsApp Invoice"
+              pdfUrl={`/api/documents/pdf?type=ORDER_SUMMARY&id=${order.id}`}
             />
             {canSeeMoney ? (
               <Button asChild variant="outline">
@@ -259,7 +249,7 @@ export default async function OrderDetailPage({
               canCancel={canCancel}
               canRefund={canRefund}
             />
-          </>
+          </div>
         }
       >
         <div className="flex flex-wrap items-center gap-2">

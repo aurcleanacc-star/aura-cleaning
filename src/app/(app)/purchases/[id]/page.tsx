@@ -24,8 +24,8 @@ export default async function PurchaseOrderPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.PURCHASE_VIEW);
 
-  const po = await prisma.purchaseOrder.findUnique({
-    where: { id },
+  const po = await prisma.purchaseOrder.findFirst({
+    where: { OR: [{ id }, { poNumber: id }] },
     include: {
       supplier: true,
       branch: { select: { name: true } },

@@ -35,8 +35,8 @@ export default async function ServiceDetailPage({
   const user = await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
 
   const [service, recentOrders, pieceCount] = await Promise.all([
-    prisma.service.findUnique({
-      where: { id },
+    prisma.service.findFirst({
+      where: { OR: [{ id }, { code: id }] },
       include: {
         rates: {
           include: { garmentType: { select: { name: true } } },

@@ -246,18 +246,29 @@ export function ExpensesView({ expenses, monthlyTotal, categoryTotals, canManage
                       <td className="px-4 py-3 text-right font-mono font-bold text-rose-600 dark:text-rose-400">
                         {formatCurrency(item.amount)}
                       </td>
-                      {canManage && (
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenEdit(item)}>
-                              <Edit className="size-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleDelete(item.id)}>
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      )}
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <a
+                            href={`/api/documents/pdf?type=EXPENSE_RECEIPT&id=${item.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Download PDF Receipt"
+                            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                          >
+                            <FileText className="size-3.5 text-emerald-700" />
+                          </a>
+                          {canManage && (
+                            <>
+                              <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenEdit(item)}>
+                                <Edit className="size-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleDelete(item.id)}>
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}

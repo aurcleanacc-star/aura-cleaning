@@ -37,8 +37,15 @@ export default async function GarmentDetailPage({
   const { code } = await params;
   const user = await requirePermission(PERMISSIONS.GARMENT_VIEW);
 
-  const garment = await prisma.garment.findUnique({
-    where: { garmentCode: decodeURIComponent(code).toUpperCase() },
+  const decoded = decodeURIComponent(code);
+  const garment = await prisma.garment.findFirst({
+    where: {
+      OR: [
+        { garmentCode: decoded.toUpperCase() },
+        { garmentCode: decoded },
+        { id: code },
+      ],
+    },
     include: {
       order: {
         select: {
