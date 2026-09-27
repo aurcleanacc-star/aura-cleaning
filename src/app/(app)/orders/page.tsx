@@ -367,6 +367,48 @@ export default async function OrdersPage({
         rows={rows}
         getRowKey={(row) => row.id}
         rowClassName={(row) => (row.isDelayed ? "bg-destructive/4" : undefined)}
+        renderMobileCard={(row) => (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href={`/orders/${row.id}`}
+                className="font-mono text-sm font-bold text-primary hover:underline"
+              >
+                {row.orderNumber}
+              </Link>
+              <div className="flex items-center gap-1.5">
+                <StatusBadge status={row.status} dot />
+                {row.priority !== "NORMAL" ? <StatusBadge status={row.priority} /> : null}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{row.customerName}</span>
+              <a href={`tel:${row.customerPhone}`} className="font-mono hover:underline text-primary">
+                📞 {row.customerPhone}
+              </a>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs border-t border-border/50">
+              <span className="text-muted-foreground">
+                {row.totalPieces} pcs · Due {formatDate(row.expectedDeliveryAt)}
+                {row.isDelayed ? <span className="ml-1 text-destructive font-medium">(late)</span> : null}
+              </span>
+              <div className="text-right">
+                <span className="font-semibold text-sm">{formatCurrency(row.totalAmount)}</span>
+                {row.outstandingAmount > 0 ? (
+                  <p className="text-[11px] font-medium text-destructive">Due: {formatCurrency(row.outstandingAmount)}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                <Link href={`/orders/${row.id}`}>View Order</Link>
+              </Button>
+            </div>
+          </div>
+        )}
         empty={
           <EmptyState
             icon={ClipboardList}

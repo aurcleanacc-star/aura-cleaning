@@ -218,6 +218,37 @@ export default async function GarmentsPage({
         columns={columns}
         rows={rows}
         getRowKey={(row) => row.id}
+        renderMobileCard={(row) => (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href={`/garments/${row.garmentCode}`}
+                className="font-mono text-sm font-bold text-primary hover:underline"
+              >
+                {row.garmentCode}
+              </Link>
+              <StatusBadge status={row.status} label={GARMENT_STATUS_LABELS[row.status]} dot />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{row.typeName} · {row.serviceName}</span>
+              <Link href={`/orders/${row.orderId}`} className="font-mono text-primary hover:underline">
+                {row.orderNumber}
+              </Link>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs border-t border-border/50">
+              <span className="text-muted-foreground">{row.customerName}</span>
+              <span className="font-medium text-muted-foreground">{STAGE_LABELS[row.stage]}</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                <Link href={`/garments/${row.garmentCode}`}>Track Garment</Link>
+              </Button>
+            </div>
+          </div>
+        )}
         empty={
           <EmptyState
             icon={Shirt}

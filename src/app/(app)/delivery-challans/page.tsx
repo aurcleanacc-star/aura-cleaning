@@ -228,6 +228,52 @@ export default async function DeliveryChallansPage({
         hiddenColumns={hiddenColumnsFrom(param(params, "hide"))}
         rows={rows}
         getRowKey={(row) => row.id}
+        renderMobileCard={(row) => (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href={`/delivery-challans/${row.id}`}
+                className="font-mono text-sm font-bold text-primary hover:underline"
+              >
+                {row.challanNumber}
+              </Link>
+              <StatusBadge status={row.status} label={CHALLAN_STATUS_LABELS[row.status]} dot />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{row.customerName}</span>
+              <a href={`tel:${row.customerPhone}`} className="font-mono text-primary hover:underline">
+                📞 {row.customerPhone}
+              </a>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs border-t border-border/50">
+              <span className="text-muted-foreground">Order: {row.order.orderNumber} ({row.items.length} items)</span>
+              <div className="text-right font-semibold text-sm">
+                {formatCurrency(row.grandTotal as never)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-muted-foreground">{formatDate(row.challanDate)}</span>
+              <div className="flex items-center gap-1">
+                <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                  <Link href={`/delivery-challans/${row.id}`}>View Details</Link>
+                </Button>
+                <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
+                  <a
+                    href={`/api/documents/pdf?type=DELIVERY_CHALLAN&id=${row.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Print PDF"
+                  >
+                    <Printer className="size-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         empty={
           <EmptyState
             icon={FileText}

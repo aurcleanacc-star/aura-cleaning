@@ -113,27 +113,27 @@ export function DocumentActionBar({
 
       {/* Real Vector PDF Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="flex h-[85vh] max-w-4xl flex-col overflow-hidden p-0">
-          <DialogHeader className="flex flex-row items-center justify-between border-b border-border p-4">
-            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-              <FileText className="size-4 text-primary" /> PDF Document Preview: {documentNumber}
+        <DialogContent className="flex h-[85vh] w-[96vw] max-w-4xl flex-col overflow-hidden rounded-2xl p-0">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border p-3 sm:p-4">
+            <DialogTitle className="flex items-center gap-2 truncate text-sm font-bold text-foreground sm:text-base">
+              <FileText className="size-4 shrink-0 text-primary" /> PDF Document Preview: {documentNumber}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 bg-muted p-2">
+          <div className="flex-1 bg-muted p-1 sm:p-2">
             <iframe src={pdfUrl} className="h-full w-full rounded-xl border border-border shadow-inner" title="PDF Document Preview" />
           </div>
 
-          <DialogFooter className="flex items-center justify-between border-t border-border p-3">
-            <div className="text-xs font-medium text-muted-foreground">Vector A4 Print-Ready PDF</div>
-            <div className="flex gap-2">
-              <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+          <DialogFooter className="flex flex-row items-center justify-between gap-2 border-t border-border p-2 sm:p-3">
+            <div className="truncate text-[11px] font-medium text-muted-foreground sm:text-xs">Vector A4 Print-Ready PDF</div>
+            <div className="flex gap-1.5 sm:gap-2">
+              <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
                 <a href={downloadUrl} download>
                   <Download className="size-3.5" /> Download
                 </a>
               </Button>
-              <Button size="sm" onClick={() => setPreviewOpen(false)}>
-                Close Preview
+              <Button size="sm" className="h-8 text-xs" onClick={() => setPreviewOpen(false)}>
+                Close
               </Button>
             </div>
           </DialogFooter>
