@@ -111,27 +111,27 @@ export function DocumentActionBar({
 
       {/* Real Vector PDF Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-4 border-b bg-slate-50 flex flex-row items-center justify-between">
-            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-emerald-800" /> PDF Document Preview: {documentNumber}
+        <DialogContent className="w-[96vw] max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden rounded-xl">
+          <DialogHeader className="p-3 sm:p-4 border-b bg-slate-50 flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2 truncate">
+              <FileText className="w-4 h-4 text-emerald-800 shrink-0" /> PDF Document Preview: {documentNumber}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 bg-slate-100 p-2">
+          <div className="flex-1 bg-slate-100 p-1 sm:p-2">
             <iframe src={pdfUrl} className="w-full h-full rounded border border-slate-300 shadow-inner" title="PDF Document Preview" />
           </div>
 
-          <DialogFooter className="p-3 bg-slate-50 border-t flex justify-between items-center">
-            <div className="text-xs text-slate-500 font-medium">Vector A4 Print-Ready PDF</div>
-            <div className="flex gap-2">
+          <DialogFooter className="p-2 sm:p-3 bg-slate-50 border-t flex flex-row justify-between items-center gap-2">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">Vector A4 Print-Ready PDF</div>
+            <div className="flex gap-1.5 sm:gap-2">
               <a href={downloadUrl} download>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
                   <Download className="w-3.5 h-3.5" /> Download
                 </Button>
               </a>
-              <Button size="sm" onClick={() => setPreviewOpen(false)}>
-                Close Preview
+              <Button size="sm" className="h-8 text-xs" onClick={() => setPreviewOpen(false)}>
+                Close
               </Button>
             </div>
           </DialogFooter>

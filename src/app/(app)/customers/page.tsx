@@ -272,6 +272,45 @@ export default async function CustomersPage({
         rows={rows}
         getRowKey={(row) => row.id}
         hiddenColumns={hiddenColumnsFrom(param(params, "hide"))}
+        renderMobileCard={(row) => (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href={`/customers/${row.id}`}
+                className="font-medium text-sm text-primary hover:underline"
+              >
+                {row.name}
+              </Link>
+              <Badge variant="outline" className="font-mono text-xs">
+                {row.code}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <a href={`tel:${row.phone}`} className="font-mono text-primary hover:underline">
+                📞 {row.phone}
+              </a>
+              <span>{row.orderCount} Orders</span>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs border-t border-border/50">
+              <span className="text-muted-foreground">Spent: {formatCurrency(num(row.totalSpent))}</span>
+              <div className="text-right">
+                {num(row.outstandingAmount) > 0 ? (
+                  <span className="font-semibold text-destructive">Owes {formatCurrency(num(row.outstandingAmount))}</span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Clear balance</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                <Link href={`/customers/${row.id}`}>View Details</Link>
+              </Button>
+            </div>
+          </div>
+        )}
         empty={
           <EmptyState
             icon={Users}

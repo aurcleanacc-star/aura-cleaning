@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { BottomNav } from "@/components/layout/bottom-nav";
 import type { Alert } from "@/lib/services/alerts";
 import type { PermissionCode } from "@/lib/rbac";
 import type { UserRole } from "@/generated/prisma/enums";
@@ -23,10 +24,8 @@ interface AppShellProps {
 
 export function AppShell({ user, alerts, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Keying the content on the path restarts the entrance animation on every
-  // navigation, which is what makes moving between screens read as a page turn
-  // rather than a swap.
   const pathname = usePathname();
+  const canScan = user.permissions.includes("garments.scan" as PermissionCode);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -42,14 +41,18 @@ export function AppShell({ user, alerts, children }: AppShellProps) {
           role={user.role}
           branchName={user.branchName}
           alerts={alerts}
-          canScan={user.permissions.includes("garments.scan" as PermissionCode)}
+          canScan={canScan}
           onOpenSidebar={() => setSidebarOpen(true)}
         />
-        <main className="mx-auto w-full max-w-[1600px] px-3 py-5 sm:px-5 sm:py-6">
+        <main className="mx-auto w-full max-w-[1600px] px-3 py-4 pb-20 sm:px-5 sm:py-6 lg:pb-6">
           <div key={pathname} className="route-enter">
             {children}
           </div>
         </main>
+        <BottomNav
+          onOpenSidebar={() => setSidebarOpen(true)}
+          canScan={canScan}
+        />
       </div>
     </div>
   );

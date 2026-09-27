@@ -35,6 +35,8 @@ interface DataTableProps<T> {
   rowClassName?: (row: T) => string | undefined;
   /** Column keys the reader has switched off, from the `hide` query param. */
   hiddenColumns?: string[];
+  /** Optional mobile-optimized card layout renderer. On small screens (< md), this card view is rendered instead of a squished table. */
+  renderMobileCard?: (row: T, index: number) => ReactNode;
 }
 
 /** Splits the `hide` query param into the set DataTable expects. */
@@ -63,6 +65,7 @@ export function DataTable<T>({
   className,
   rowClassName,
   hiddenColumns = [],
+  renderMobileCard,
 }: DataTableProps<T>) {
   if (rows.length === 0 && empty) {
     return <>{empty}</>;
@@ -72,52 +75,76 @@ export function DataTable<T>({
   const visible = columns.filter((column) => !hidden.has(column.key));
 
   return (
-    <div className={cn("rounded-lg border border-border bg-card", className)}>
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            {visible.map((column) => (
-              <TableHead
-                key={column.key}
-                className={cn(
-                  column.hideOnMobile && "hidden sm:table-cell",
-                  column.headerClassName,
-                )}
-              >
-                {column.sortKey ? (
-                  <SortHeader
-                    sortKey={column.sortKey}
-                    label={column.header}
-                    align={column.headerClassName?.includes("text-right") ? "right" : "left"}
-                  />
-                ) : (
-                  column.header
-                )}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+    <div className="space-y-4">
+      {renderMobileCard ? (
+        <div className="space-y-3 md:hidden">
           {rows.map((row, index) => (
-            <TableRow
+            <div
               key={getRowKey(row, index)}
-              className={cn("group/row", rowClassName?.(row))}
+              className={cn(
+                "rounded-xl border border-border bg-card p-3.5 shadow-sm space-y-2.5 transition-all hover:border-primary/40",
+                rowClassName?.(row),
+              )}
             >
+              {renderMobileCard(row, index)}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "overflow-x-auto rounded-xl border border-border bg-card scrollbar-thin",
+          renderMobileCard ? "hidden md:block" : "block",
+          className,
+        )}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
               {visible.map((column) => (
-                <TableCell
+                <TableHead
                   key={column.key}
                   className={cn(
                     column.hideOnMobile && "hidden sm:table-cell",
-                    column.className,
+                    column.headerClassName,
                   )}
                 >
-                  {column.cell(row, index)}
-                </TableCell>
+                  {column.sortKey ? (
+                    <SortHeader
+                      sortKey={column.sortKey}
+                      label={column.header}
+                      align={column.headerClassName?.includes("text-right") ? "right" : "left"}
+                    />
+                  ) : (
+                    column.header
+                  )}
+                </TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, index) => (
+              <TableRow
+                key={getRowKey(row, index)}
+                className={cn("group/row", rowClassName?.(row))}
+              >
+                {visible.map((column) => (
+                  <TableCell
+                    key={column.key}
+                    className={cn(
+                      column.hideOnMobile && "hidden sm:table-cell",
+                      column.className,
+                    )}
+                  >
+                    {column.cell(row, index)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
