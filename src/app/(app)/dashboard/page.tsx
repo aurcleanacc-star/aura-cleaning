@@ -154,11 +154,11 @@ export default async function DashboardPage({
       <LiveRefresh intervalMs={20000} />
       
       {/* AURCLEAN ERP Branded Welcome Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-900/10 bg-gradient-to-r from-[#06261c] via-[#0a3b2c] to-[#0d4a38] p-5 text-white shadow-lg">
-        <div className="absolute right-0 top-0 -mr-12 -mt-12 size-56 rounded-full bg-emerald-400/10 blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground shadow-sm">
+        <div className="absolute right-0 top-0 -mr-12 -mt-12 size-56 rounded-full bg-brand/20 blur-2xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="relative flex items-center justify-center p-2 rounded-2xl bg-emerald-500/15 border border-emerald-400/25 backdrop-blur-sm shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+            <div className="relative flex items-center justify-center p-2 rounded-2xl bg-white/10 border border-white/10 backdrop-blur-sm">
               <AurcleanLogo size="lg" variant="icon" />
             </div>
             <div>
@@ -166,17 +166,17 @@ export default async function DashboardPage({
                 <h1 className="text-xl font-bold tracking-tight text-white">
                   Welcome to AURCLEAN ERP
                 </h1>
-                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-400/30">
+                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white border border-white/15">
                   {user.role}
                 </span>
               </div>
-              <p className="text-xs text-emerald-200/80 mt-0.5">
+              <p className="text-xs text-white/70 mt-0.5">
                 Real-time Laundry Operations & Financial Management System
               </p>
             </div>
           </div>
           {hasPermission(user, PERMISSIONS.ORDER_CREATE) ? (
-            <Button asChild className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold shadow-md">
+            <Button asChild variant="success" className="font-semibold shadow-md">
               <Link href="/orders/new">+ New Order</Link>
             </Button>
           ) : null}

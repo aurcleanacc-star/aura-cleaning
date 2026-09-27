@@ -4,16 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import { visibleSections, type NavItem } from "@/components/layout/nav-config";
-import type { PermissionCode } from "@/lib/rbac";
+import { ROLE_LABELS, type PermissionCode } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AurcleanLogo } from "@/components/shared/aurclean-logo";
+import type { UserRole } from "@/generated/prisma/enums";
 
 interface SidebarProps {
   permissions: PermissionCode[];
   open: boolean;
   onClose: () => void;
+  user: { name: string; email: string; role: UserRole; branchName: string | null };
 }
 
 function isActive(pathname: string, item: NavItem) {
@@ -21,7 +24,7 @@ function isActive(pathname: string, item: NavItem) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-export function Sidebar({ permissions, open, onClose }: SidebarProps) {
+export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
   const pathname = usePathname();
   const sections = visibleSections(permissions);
 
@@ -29,7 +32,7 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
     <>
       {open ? (
         <div
-          className="animate-fade-in-soft fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="animate-fade-in-soft fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={onClose}
           aria-hidden
         />
@@ -37,18 +40,19 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#06261c] text-emerald-50 transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] lg:translate-x-0 border-r border-emerald-900/60 shadow-xl",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] lg:translate-x-0 lg:shadow-sm",
+          "lg:inset-y-4 lg:left-4 lg:h-[calc(100dvh-2rem)] lg:w-60 lg:rounded-2xl lg:border lg:border-sidebar-border",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-emerald-900/60 px-4 bg-[#041d15]">
-          <Link href="/dashboard" className="flex items-center gap-2.5 rounded-xl px-1 py-1 transition-all duration-200 hover:opacity-90">
-            <AurcleanLogo size="md" variant="full" showSubtitle subtitleText="LAUNDRY ERP" theme="dark" />
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 px-4">
+          <Link href="/dashboard" className="flex items-center gap-2.5 rounded-xl px-1 py-1 transition-opacity hover:opacity-90">
+            <AurcleanLogo size="sm" variant="full" theme="light" />
           </Link>
           <Button
             variant="ghost"
             size="icon-sm"
-            className="text-emerald-300 hover:bg-emerald-900/60 hover:text-white lg:hidden"
+            className="text-muted-foreground lg:hidden"
             onClick={onClose}
             aria-label="Close navigation"
           >
@@ -56,11 +60,11 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
           </Button>
         </div>
 
-        <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-thin px-3 py-4">
+        <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-thin px-3 py-2">
           {sections.map((section, index) => (
             <div key={section.label ?? `section-${index}`} className="space-y-1">
               {section.label ? (
-                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400/80">
+                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-sidebar-muted">
                   {section.label}
                 </p>
               ) : null}
@@ -69,10 +73,30 @@ export function Sidebar({ permissions, open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="border-t border-emerald-900/60 px-4 py-3 bg-[#041d15]/50">
-          <p className="text-[11px] font-medium text-emerald-300/70">
-            AURCLEAN ERP · Connected Ledger
-          </p>
+        <div className="shrink-0 border-t border-sidebar-border p-3">
+          <Link
+            href="/profile"
+            className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-hover"
+          >
+            <span className="relative shrink-0">
+              <Avatar className="size-9">
+                <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
+                  {initials(user.name)}
+                </AvatarFallback>
+              </Avatar>
+              <span
+                className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-sidebar bg-success"
+                aria-hidden
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-sidebar-foreground">{user.name}</p>
+              <p className="truncate text-xs text-sidebar-muted">
+                {ROLE_LABELS[user.role]}
+                {user.branchName ? ` · ${user.branchName}` : ""}
+              </p>
+            </div>
+          </Link>
         </div>
       </aside>
     </>
@@ -99,22 +123,18 @@ function NavGroup({
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200",
+                "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all duration-200",
                 active
-                  ? "bg-emerald-800/60 font-semibold text-white shadow-sm shadow-emerald-950/40"
-                  : "text-emerald-100/70 hover:bg-emerald-900/40 hover:text-white hover:pl-3.5",
+                  ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-sm"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground",
               )}
             >
-              {active ? (
-                <span
-                  className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-emerald-400 shadow-[0_0_8px_#34d399]"
-                  aria-hidden
-                />
-              ) : null}
               <item.icon
                 className={cn(
                   "size-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
-                  active ? "text-emerald-400" : "text-emerald-200/60 group-hover:text-emerald-300",
+                  active
+                    ? "text-sidebar-accent-foreground"
+                    : "text-sidebar-muted group-hover:text-sidebar-foreground",
                 )}
                 aria-hidden
               />

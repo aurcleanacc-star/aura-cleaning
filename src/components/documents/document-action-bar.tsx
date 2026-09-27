@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Download, Send, Eye, FileText, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Printer, Download, Send, Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -67,13 +67,13 @@ export function DocumentActionBar({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm print:hidden">
       <div className="flex items-center gap-2">
-        <FileText className="w-5 h-5 text-emerald-800" />
+        <FileText className="size-5 text-primary" />
         <div>
-          <h4 className="font-bold text-slate-900 text-sm">{documentNumber}</h4>
+          <h4 className="text-sm font-bold text-foreground">{documentNumber}</h4>
           {statusStep && (
-            <p className="text-xs font-semibold text-emerald-700 animate-pulse">{statusStep}</p>
+            <p className="text-xs font-semibold text-success animate-pulse">{statusStep}</p>
           )}
         </div>
       </div>
@@ -81,55 +81,57 @@ export function DocumentActionBar({
       <div className="flex flex-wrap items-center gap-2">
         {/* Preview Button */}
         <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)} className="gap-1.5 text-xs">
-          <Eye className="w-3.5 h-3.5" /> Preview PDF
+          <Eye className="size-3.5" /> Preview PDF
         </Button>
 
         {/* Download PDF Button */}
-        <a href={downloadUrl} download>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-            <Download className="w-3.5 h-3.5" /> Download PDF
-          </Button>
-        </a>
+        <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs">
+          <a href={downloadUrl} download>
+            <Download className="size-3.5" /> Download PDF
+          </a>
+        </Button>
 
         {/* Print Button */}
-        <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-            <Printer className="w-3.5 h-3.5" /> Print
-          </Button>
-        </a>
+        <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs">
+          <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+            <Printer className="size-3.5" /> Print
+          </a>
+        </Button>
 
         {/* Send WhatsApp Button */}
         <Button
           onClick={handleSendWhatsApp}
           disabled={sendingWa}
+          loading={sendingWa}
+          variant="success"
           size="sm"
-          className="gap-1.5 text-xs bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
+          className="gap-1.5 text-xs"
         >
-          <Send className="w-3.5 h-3.5" /> {sendingWa ? "Sending PDF..." : "Send to WhatsApp"}
+          <Send className="size-3.5" /> {sendingWa ? "Sending PDF..." : "Send to WhatsApp"}
         </Button>
       </div>
 
       {/* Real Vector PDF Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-4 border-b bg-slate-50 flex flex-row items-center justify-between">
-            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-emerald-800" /> PDF Document Preview: {documentNumber}
+        <DialogContent className="flex h-[85vh] max-w-4xl flex-col overflow-hidden p-0">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border p-4">
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <FileText className="size-4 text-primary" /> PDF Document Preview: {documentNumber}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 bg-slate-100 p-2">
-            <iframe src={pdfUrl} className="w-full h-full rounded border border-slate-300 shadow-inner" title="PDF Document Preview" />
+          <div className="flex-1 bg-muted p-2">
+            <iframe src={pdfUrl} className="h-full w-full rounded-xl border border-border shadow-inner" title="PDF Document Preview" />
           </div>
 
-          <DialogFooter className="p-3 bg-slate-50 border-t flex justify-between items-center">
-            <div className="text-xs text-slate-500 font-medium">Vector A4 Print-Ready PDF</div>
+          <DialogFooter className="flex items-center justify-between border-t border-border p-3">
+            <div className="text-xs font-medium text-muted-foreground">Vector A4 Print-Ready PDF</div>
             <div className="flex gap-2">
-              <a href={downloadUrl} download>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                  <Download className="w-3.5 h-3.5" /> Download
-                </Button>
-              </a>
+              <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+                <a href={downloadUrl} download>
+                  <Download className="size-3.5" /> Download
+                </a>
+              </Button>
               <Button size="sm" onClick={() => setPreviewOpen(false)}>
                 Close Preview
               </Button>

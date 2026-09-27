@@ -24,12 +24,12 @@ export function GlobalSearch() {
         router.push(`/search?q=${encodeURIComponent(query)}`);
       }}
     >
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="Search garment, order, rack or phone…"
-        className="h-9 pl-8"
+        placeholder="Search…"
+        className="h-10 rounded-full border-transparent bg-muted pl-10 shadow-none focus-visible:border-input focus-visible:bg-card"
         aria-label="Global search"
       />
     </form>

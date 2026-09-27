@@ -34,18 +34,21 @@ export function AppShell({ user, alerts, children }: AppShellProps) {
         permissions={user.permissions}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        user={user}
       />
-      <div className="lg:pl-64">
-        <Topbar
-          name={user.name}
-          email={user.email}
-          role={user.role}
-          branchName={user.branchName}
-          alerts={alerts}
-          canScan={user.permissions.includes("garments.scan" as PermissionCode)}
-          onOpenSidebar={() => setSidebarOpen(true)}
-        />
-        <main className="mx-auto w-full max-w-[1600px] px-3 py-5 sm:px-5 sm:py-6">
+      <div className="lg:pl-[272px]">
+        <div className="mx-auto w-full max-w-[1600px] px-3 pt-3 sm:px-5 sm:pt-4">
+          <Topbar
+            name={user.name}
+            email={user.email}
+            role={user.role}
+            branchName={user.branchName}
+            alerts={alerts}
+            canScan={user.permissions.includes("garments.scan" as PermissionCode)}
+            onOpenSidebar={() => setSidebarOpen(true)}
+          />
+        </div>
+        <main className="mx-auto w-full max-w-[1600px] px-3 pb-5 sm:px-5 sm:pb-6">
           <div key={pathname} className="route-enter">
             {children}
           </div>
