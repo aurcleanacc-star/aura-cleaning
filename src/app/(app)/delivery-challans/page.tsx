@@ -148,9 +148,13 @@ export default async function DeliveryChallansPage({
             </Link>
           </Button>
           <Button asChild variant="ghost" size="icon" aria-label="Print challan">
-            <Link href={`/delivery-challans/${row.id}/print`}>
+            <a
+              href={`/api/documents/pdf?type=DELIVERY_CHALLAN&id=${row.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Printer className="size-4" />
-            </Link>
+            </a>
           </Button>
         </div>
       ),

@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { recordAudit } from "@/lib/audit";
-import { isValidPdfBuffer, renderHtmlToPdf, type RenderPdfOptions } from "@/lib/pdf/render";
 import type { WhatsAppMessageStatus, WhatsAppMessageType } from "@/generated/prisma/client";
 
 // Server-only OpenWA environment configuration
@@ -573,58 +572,6 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     messageId: log.id,
     status: log.status,
   };
-}
-
-export interface SendDocumentToWhatsAppParams {
-  phone: string;
-  messageType: WhatsAppMessageType;
-  /** Fully interpolated message text — the caller decides what belongs in it (e.g. a Delivery Challan's message must never mention money). */
-  messageText: string;
-  /** Standalone HTML document (its own <html>/<style>) — the exact same one the on-screen preview renders. */
-  html: string;
-  /** e.g. "AURCLEAN-Delivery-Challan-DC-2026-000042.pdf" */
-  filename: string;
-  pdfOptions?: RenderPdfOptions;
-  customerId?: string;
-  orderId?: string;
-  sentByUserId?: string;
-}
-
-/**
- * The one path every document type sends through: render the document's own
- * HTML to a real PDF, sanity-check the bytes are actually a PDF, then hand it
- * to sendWhatsAppMessage as a file attachment. No document type is allowed to
- * skip PDF generation and fall back to a text-only message — if the PDF
- * can't be built, this throws instead of silently sending text.
- */
-export async function sendDocumentToWhatsApp(params: SendDocumentToWhatsAppParams): Promise<{
-  success: boolean;
-  messageId: string;
-  status: WhatsAppMessageStatus;
-}> {
-  let pdfBuffer: Buffer;
-  try {
-    pdfBuffer = await renderHtmlToPdf(params.html, params.pdfOptions);
-  } catch (error) {
-    throw new Error(
-      `PDF generation failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  if (!isValidPdfBuffer(pdfBuffer)) {
-    throw new Error("PDF generation failed: the rendered file is not a valid PDF.");
-  }
-
-  return sendWhatsAppMessage({
-    phone: params.phone,
-    messageType: params.messageType,
-    messageText: params.messageText,
-    documentName: params.filename,
-    documentBase64: pdfBuffer.toString("base64"),
-    customerId: params.customerId,
-    orderId: params.orderId,
-    sentByUserId: params.sentByUserId,
-  });
 }
 
 /** Interpolates variables into editable message templates */

@@ -7,10 +7,7 @@ import {
   createDeliveryChallan,
   updateChallanStatus,
   cancelDeliveryChallan,
-  getDeliveryChallanById,
 } from "@/lib/services/delivery-challan";
-import { sendDocumentToWhatsApp, interpolateWhatsAppTemplate } from "@/lib/services/whatsapp";
-import { buildDeliveryChallanHtml } from "@/lib/pdf/delivery-challan-document";
 import type { ChallanStatus, PaymentMethod } from "@/generated/prisma/client";
 
 export async function createDeliveryChallanAction(data: {
@@ -111,58 +108,3 @@ export async function cancelChallanAction(id: string, reason: string) {
   }
 }
 
-export async function sendChallanWhatsAppAction(challanId: string) {
-  const session = await requirePermission(PERMISSIONS.DELIVERY_MANAGE);
-
-  try {
-    const challan = await getDeliveryChallanById(challanId);
-    if (!challan) {
-      throw new Error(`Delivery Challan #${challanId} not found.`);
-    }
-
-    if (!challan.customerPhone) {
-      throw new Error(
-        "Customer WhatsApp number is not available. Update the customer's phone number before sending.",
-      );
-    }
-
-    // Deliberately no {{total}}/{{paid}}/{{balance}} — a Delivery Challan
-    // documents garments moving, not money, and must never carry payment
-    // information, on-screen or in the WhatsApp message.
-    const messageText = interpolateWhatsAppTemplate(
-      "Hello {{customerName}},\n\nPlease find your AURCLEAN Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\nAURCLEAN\nThe Organic Laundry",
-      {
-        customerName: challan.customerName,
-        orderId: challan.order.orderNumber,
-        challanNumber: challan.challanNumber,
-        deliveryDate: challan.deliveryDate ?? challan.expectedDeliveryDate ?? undefined,
-      },
-    );
-
-    const html = buildDeliveryChallanHtml(challan);
-
-    const result = await sendDocumentToWhatsApp({
-      phone: challan.customerPhone,
-      messageType: "DELIVERY_CHALLAN",
-      messageText,
-      html,
-      filename: `AURCLEAN-Delivery-Challan-${challan.challanNumber}.pdf`,
-      pdfOptions: { footer: { label: `AURCLEAN • Delivery Challan No: ${challan.challanNumber}` } },
-      customerId: challan.customerId || undefined,
-      orderId: challan.orderId,
-      sentByUserId: session.id,
-    });
-
-    revalidatePath(`/delivery-challans/${challanId}`);
-
-    return {
-      success: true,
-      messageId: result.messageId,
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error?.message || "Failed to send Delivery Challan via WhatsApp",
-    };
-  }
-}

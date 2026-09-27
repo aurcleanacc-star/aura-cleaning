@@ -150,15 +150,8 @@ export async function generateChallanPDF(challanId: string): Promise<{ buffer: B
 
   builder.renderItemsTable(columns, rows);
 
-  builder.renderTotalsBlock({
-    subtotal: Number(challan.subtotal),
-    discount: Number(challan.discountAmount),
-    gstRate: Number(challan.gstRate),
-    gstAmount: Number(challan.gstAmount),
-    grandTotal: Number(challan.grandTotal),
-    paidAmount: Number(challan.paidAmount),
-    balanceAmount: Number(challan.balanceAmount),
-  });
+  const totalQuantity = challan.items.reduce((sum, item) => sum + item.quantity, 0);
+  builder.renderSimpleTotal("Total Garments", totalQuantity);
 
   builder.renderTermsAndSignatures({
     terms: challan.terms || company.termsConditions,

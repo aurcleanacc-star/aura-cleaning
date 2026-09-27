@@ -11,7 +11,8 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { formatCurrency } from "@/lib/money";
 import { CHALLAN_STATUS_LABELS } from "@/lib/workflow";
 import { toast } from "sonner";
-import { createDeliveryChallanAction, sendChallanWhatsAppAction, updateChallanStatusAction } from "@/app/(app)/delivery-challans/actions";
+import { createDeliveryChallanAction, updateChallanStatusAction } from "@/app/(app)/delivery-challans/actions";
+import { sendDocumentWhatsAppAction } from "@/app/api/documents/actions";
 import type { ChallanStatus } from "@/generated/prisma/client";
 
 interface ChallanSummary {
@@ -70,7 +71,10 @@ export function OrderDeliveryChallanSection({
   const handleWhatsApp = async (challanId: string) => {
     setSendingWa(true);
     try {
-      const res = await sendChallanWhatsAppAction(challanId);
+      const res = await sendDocumentWhatsAppAction({
+        documentType: "DELIVERY_CHALLAN",
+        documentId: challanId,
+      });
       if (res.success) {
         toast.success(`Delivery Challan sent to ${customerPhone} via WhatsApp!`);
       } else {
@@ -147,9 +151,13 @@ export function OrderDeliveryChallanSection({
               </Button>
 
               <Button asChild variant="outline" size="sm">
-                <Link href={`/delivery-challans/${activeChallan.id}/print`}>
+                <a
+                  href={`/api/documents/pdf?type=DELIVERY_CHALLAN&id=${activeChallan.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <Printer /> Print / PDF
-                </Link>
+                </a>
               </Button>
 
               <Button onClick={() => handleWhatsApp(activeChallan.id)} loading={sendingWa} variant="outline" size="sm">

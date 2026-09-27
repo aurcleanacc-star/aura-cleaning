@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { updateChallanStatusAction, cancelChallanAction, sendChallanWhatsAppAction } from "../actions";
+import { updateChallanStatusAction, cancelChallanAction } from "../actions";
 import { DocumentActionBar } from "@/components/documents/document-action-bar";
 import type { ChallanStatus, PaymentMethod } from "@/generated/prisma/client";
 

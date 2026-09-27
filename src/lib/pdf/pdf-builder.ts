@@ -37,11 +37,14 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
 
   return {
     name: map.get("company_name") || map.get("app_name") || "AURCLEAN Laundry Management",
-    address: map.get("company_address") || "123 Clean Tech Park, Indiranagar, Bengaluru, KA 560038",
-    phone: map.get("company_phone") || "+91 9876543210",
-    email: map.get("company_email") || "support@aurclean.com",
-    website: map.get("company_website") || "www.aurclean.com",
-    gstin: map.get("company_gstin") || "29AAAAA0000A1Z5",
+    // No fabricated address/phone/GSTIN here: an unconfigured field is left
+    // blank (and the footer omits it) rather than printing a placeholder
+    // that reads as a real registered business number on every document.
+    address: map.get("company_address") || "",
+    phone: map.get("company_phone") || "",
+    email: map.get("company_email") || "",
+    website: map.get("company_website") || "",
+    gstin: map.get("company_gstin") || "",
     logoUrl: map.get("company_logo") || "/logo.png",
     footerText: map.get("document_footer_text") || "Thank you for choosing AURCLEAN. Dedicated to laundry excellence.",
     termsConditions:
@@ -422,6 +425,36 @@ export class PDFDocumentBuilder {
   }
 
   /**
+   * A single highlighted total line with no financial breakdown — for
+   * documents like the Delivery Challan that record garments moving, not
+   * money, and must never show subtotal/tax/paid/balance.
+   */
+  renderSimpleTotal(label: string, value: string | number) {
+    const boxWidth = 220;
+    const startX = this.margin + this.contentWidth - boxWidth;
+    let y = this.currentY;
+
+    if (y + 40 > 750) {
+      this.doc.addPage();
+      y = this.margin;
+    }
+
+    this.doc.rect(startX, y, boxWidth, 26).fill(COLORS.emeraldLight);
+    this.doc
+      .fillColor(COLORS.primary)
+      .fontSize(10)
+      .font("Helvetica-Bold")
+      .text(label.toUpperCase(), startX + 8, y + 8);
+    this.doc
+      .fillColor(COLORS.primary)
+      .fontSize(10)
+      .font("Helvetica-Bold")
+      .text(String(value), startX + 8, y + 8, { width: boxWidth - 16, align: "right" });
+
+    this.currentY = y + 26 + 16;
+  }
+
+  /**
    * Renders Terms, Remarks, and Signature Boxes
    */
   renderTermsAndSignatures(params: {
@@ -521,16 +554,20 @@ export class PDFDocumentBuilder {
         .lineWidth(0.5)
         .stroke();
 
+      const footerParts = [
+        this.company.name,
+        this.company.phone ? `Phone: ${this.company.phone}` : null,
+        this.company.email ? `Email: ${this.company.email}` : null,
+        this.company.gstin ? `GSTIN: ${this.company.gstin}` : null,
+      ].filter(Boolean);
+
       this.doc
         .fillColor(COLORS.slate)
         .fontSize(8)
         .font("Helvetica")
-        .text(
-          `${this.company.name} • Phone: ${this.company.phone} • Email: ${this.company.email} • GSTIN: ${this.company.gstin}`,
-          this.margin,
-          footerY + 6,
-          { width: this.contentWidth - 80 },
-        );
+        .text(footerParts.join(" • "), this.margin, footerY + 6, {
+          width: this.contentWidth - 80,
+        });
 
       this.doc
         .fillColor(COLORS.slate)
