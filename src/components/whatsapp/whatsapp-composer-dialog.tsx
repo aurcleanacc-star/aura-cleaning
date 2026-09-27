@@ -179,7 +179,7 @@ export function WhatsAppComposerDialog({
             </div>
           </div>
 
-          {(documentName || messageType === "INVOICE" || messageType === "PAYMENT_RECEIPT" || messageType === "DELIVERY_RECEIPT") && (
+          {documentBase64 ? (
             <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/40 p-2.5 text-xs">
               <div className="flex items-center gap-2">
                 <FileText className="size-4 text-emerald-600 dark:text-emerald-400" />
@@ -187,10 +187,15 @@ export function WhatsAppComposerDialog({
                   <span className="font-semibold text-emerald-950 dark:text-emerald-100">
                     {documentName || `${messageType.replace(/_/g, " ")}.pdf`}
                   </span>
-                  <p className="text-[10px] text-muted-foreground">Auto-generated ERP PDF attached</p>
+                  <p className="text-[10px] text-muted-foreground">Generated PDF attached</p>
                 </div>
               </div>
               <Badge tone="success" className="text-[10px]">Attached</Badge>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+              <ShieldAlert className="size-4 shrink-0" />
+              <span>No document attached — this will send as a text-only message.</span>
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { getDeliveryChallanById } from "@/lib/services/delivery-challan";
+import { buildDeliveryChallanHtml } from "@/lib/pdf/delivery-challan-document";
 import { ChallanPrintView } from "../../challan-print-view";
 
 interface PageProps {
@@ -26,5 +27,14 @@ export default async function DeliveryChallanPrintPage({ params }: PageProps) {
     notFound();
   }
 
-  return <ChallanPrintView challan={challan} />;
+  const html = buildDeliveryChallanHtml(challan);
+
+  return (
+    <ChallanPrintView
+      challanId={challan.id}
+      challanNumber={challan.challanNumber}
+      customerPhone={challan.customerPhone}
+      html={html}
+    />
+  );
 }
