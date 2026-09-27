@@ -14,6 +14,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:sync-permissions": "tsx prisma/sync-permissions.ts",
     "db:studio": "prisma studio",
     "whatsapp:server": "node scripts/openwa-server.mjs",
     "postinstall": "prisma generate"

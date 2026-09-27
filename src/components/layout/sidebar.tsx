@@ -17,7 +17,8 @@ interface SidebarProps {
 }
 
 function isActive(pathname: string, item: NavItem) {
-  return item.exact ? pathname === item.href : pathname.startsWith(item.href);
+  if (item.exact) return pathname === item.href;
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
 export function Sidebar({ permissions, open, onClose }: SidebarProps) {

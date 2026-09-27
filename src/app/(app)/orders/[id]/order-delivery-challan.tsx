@@ -6,21 +6,34 @@ import { useRouter } from "next/navigation";
 import { FileText, Plus, Printer, Send, CheckCircle, Eye, Truck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { formatCurrency } from "@/lib/money";
+import { CHALLAN_STATUS_LABELS } from "@/lib/workflow";
 import { toast } from "sonner";
 import { createDeliveryChallanAction, sendChallanWhatsAppAction, updateChallanStatusAction } from "@/app/(app)/delivery-challans/actions";
+import type { ChallanStatus } from "@/generated/prisma/client";
+
+interface ChallanSummary {
+  id: string;
+  challanNumber: string;
+  status: ChallanStatus;
+  grandTotal: unknown;
+  balanceAmount: unknown;
+}
 
 interface Props {
   orderId: string;
   orderNumber: string;
   customerName: string;
   customerPhone: string;
-  challans: any[];
+  challans: ChallanSummary[];
   canManage: boolean;
 }
 
 export function OrderDeliveryChallanSection({
   orderId,
-  orderNumber,
+  orderNumber: _orderNumber,
   customerName,
   customerPhone,
   challans,
@@ -47,8 +60,8 @@ export function OrderDeliveryChallanSection({
       } else {
         toast.error(res.error || "Failed to create Delivery Challan");
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Error creating challan");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error creating challan");
     } finally {
       setLoading(false);
     }
@@ -63,8 +76,8 @@ export function OrderDeliveryChallanSection({
       } else {
         toast.error(res.error || "Failed to send WhatsApp");
       }
-    } catch (err: any) {
-      toast.error(err?.message || "WhatsApp delivery error");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "WhatsApp delivery error");
     } finally {
       setSendingWa(false);
     }
@@ -80,99 +93,78 @@ export function OrderDeliveryChallanSection({
       } else {
         toast.error(res.error || "Failed to update status");
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Delivery update error");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delivery update error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-      <div className="flex items-center justify-between border-b pb-2">
-        <div className="flex items-center gap-2">
-          <FileText className="w-5 h-5 text-emerald-700" />
-          <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-[11px]">
-            Delivery Challan
-          </h3>
-        </div>
-
-        {canManage && !activeChallan && (
-          <Button
-            onClick={handleCreateChallan}
-            disabled={loading}
-            size="sm"
-            className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 h-8 text-xs shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5" /> Create Delivery Challan
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <FileText className="size-4 text-primary" /> Delivery Challan
+        </CardTitle>
+        {canManage && !activeChallan ? (
+          <Button onClick={handleCreateChallan} loading={loading} size="sm">
+            <Plus /> Create Delivery Challan
           </Button>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {!activeChallan ? (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 py-4 text-center">
+            <Truck className="mx-auto mb-1 size-8 text-muted-foreground/50" />
+            <p className="text-xs font-medium text-muted-foreground">
+              No active Delivery Challan generated for this order yet.
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Generate a formal challan before sending garments for delivery.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs">
+              <div>
+                <p className="font-mono text-sm font-semibold">{activeChallan.challanNumber}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Total: <span className="font-semibold text-foreground">{formatCurrency(activeChallan.grandTotal as never)}</span>{" "}
+                  · Balance:{" "}
+                  <span className="font-semibold text-warning-foreground">
+                    {formatCurrency(activeChallan.balanceAmount as never)}
+                  </span>
+                </p>
+              </div>
+              <StatusBadge status={activeChallan.status} label={CHALLAN_STATUS_LABELS[activeChallan.status]} dot />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/delivery-challans/${activeChallan.id}`}>
+                  <Eye /> View Challan
+                </Link>
+              </Button>
+
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/delivery-challans/${activeChallan.id}/print`}>
+                  <Printer /> Print / PDF
+                </Link>
+              </Button>
+
+              <Button onClick={() => handleWhatsApp(activeChallan.id)} loading={sendingWa} variant="outline" size="sm">
+                <Send /> WhatsApp Challan
+              </Button>
+
+              {activeChallan.status !== "DELIVERED" && canManage ? (
+                <Button onClick={() => handleMarkDelivered(activeChallan.id)} loading={loading} size="sm">
+                  <CheckCircle /> Mark Delivered
+                </Button>
+              ) : null}
+            </div>
+          </div>
         )}
-      </div>
-
-      {!activeChallan ? (
-        <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          <Truck className="w-8 h-8 text-slate-300 mx-auto mb-1" />
-          <p className="text-xs text-slate-600 font-medium">No active Delivery Challan generated for this order yet.</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Generate a formal challan before sending garments for delivery.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
-            <div>
-              <p className="font-bold text-slate-900 font-mono text-sm">{activeChallan.challanNumber}</p>
-              <p className="text-slate-500 mt-0.5">
-                Total: <span className="font-semibold text-slate-800">₹{Number(activeChallan.grandTotal)}</span> • Balance: <span className="font-semibold text-amber-800">₹{Number(activeChallan.balanceAmount)}</span>
-              </p>
-            </div>
-
-            <div className="text-right">
-              <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold uppercase text-[10px] tracking-wider border ${
-                activeChallan.status === "DELIVERED"
-                  ? "bg-emerald-100 text-emerald-900 border-emerald-300"
-                  : "bg-blue-100 text-blue-900 border-blue-300"
-              }`}>
-                {activeChallan.status.replace(/_/g, " ")}
-              </span>
-            </div>
-          </div>
-
-          {/* Buttons Row */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Link href={`/delivery-challans/${activeChallan.id}`}>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <Eye className="w-3.5 h-3.5" /> View Challan
-              </Button>
-            </Link>
-
-            <Link href={`/delivery-challans/${activeChallan.id}/print`}>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <Printer className="w-3.5 h-3.5" /> Print / PDF
-              </Button>
-            </Link>
-
-            <Button
-              onClick={() => handleWhatsApp(activeChallan.id)}
-              disabled={sendingWa}
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-            >
-              <Send className="w-3.5 h-3.5" /> {sendingWa ? "Sending..." : "WhatsApp Challan"}
-            </Button>
-
-            {activeChallan.status !== "DELIVERED" && canManage && (
-              <Button
-                onClick={() => handleMarkDelivered(activeChallan.id)}
-                disabled={loading}
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white"
-              >
-                <CheckCircle className="w-3.5 h-3.5" /> Mark Delivered
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }

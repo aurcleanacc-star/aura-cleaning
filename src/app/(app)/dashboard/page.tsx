@@ -33,7 +33,7 @@ import {
 import { CategoryBarChart } from "@/components/charts/category-bar-chart";
 import { PipelineChart } from "@/components/charts/pipeline-chart";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency, num } from "@/lib/money";
+import { formatCompactCurrency, formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import {
   branchPerformance,
@@ -311,52 +311,52 @@ export default async function DashboardPage({
               Open Financial Dashboard →
             </Link>
           </div>
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
               label="Today's Incoming"
-              value={formatCurrency(financialOverview.todayIncoming)}
+              value={formatCompactCurrency(financialOverview.todayIncoming)}
               icon={Wallet}
               tone="success"
               href="/finance/incoming"
             />
             <StatCard
               label="Today's Outgoing"
-              value={formatCurrency(financialOverview.todayOutgoing)}
+              value={formatCompactCurrency(financialOverview.todayOutgoing)}
               icon={Banknote}
               tone="danger"
               href="/finance/outgoing"
             />
             <StatCard
               label="Net Today"
-              value={formatCurrency(financialOverview.netToday)}
+              value={formatCompactCurrency(financialOverview.netToday)}
               icon={Wallet}
               tone={financialOverview.netToday >= 0 ? "success" : "danger"}
               href="/finance/reports"
             />
             <StatCard
               label="Cash in Hand"
-              value={formatCurrency(financialOverview.cashInHand)}
+              value={formatCompactCurrency(financialOverview.cashInHand)}
               icon={Wallet}
               tone="info"
               href="/finance/cash"
             />
             <StatCard
               label="Bank Balance"
-              value={formatCurrency(financialOverview.bankBalance)}
+              value={formatCompactCurrency(financialOverview.bankBalance)}
               icon={Wallet}
               tone="info"
               href="/finance/bank-accounts"
             />
             <StatCard
               label="Receivables"
-              value={formatCurrency(financialOverview.customerReceivables)}
+              value={formatCompactCurrency(financialOverview.customerReceivables)}
               icon={Wallet}
               tone={financialOverview.customerReceivables > 0 ? "warning" : "default"}
               href="/finance/receivables"
             />
             <StatCard
               label="Payables"
-              value={formatCurrency(financialOverview.supplierPayables)}
+              value={formatCompactCurrency(financialOverview.supplierPayables)}
               icon={Banknote}
               tone={financialOverview.supplierPayables > 0 ? "danger" : "default"}
               href="/finance/payables"

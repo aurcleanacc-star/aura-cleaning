@@ -1,4 +1,5 @@
 import type {
+  ChallanStatus,
   GarmentStatus,
   OrderStatus,
   ProcessingStage,
@@ -327,6 +328,24 @@ export const TASK_STATUS_TONE: Record<TaskStatus, BadgeTone> = {
   SKIPPED: "neutral",
 };
 
+export const CHALLAN_STATUS_TONE: Record<ChallanStatus, BadgeTone> = {
+  DRAFT: "neutral",
+  GENERATED: "info",
+  READY_FOR_DELIVERY: "warning",
+  PARTIALLY_DELIVERED: "progress",
+  DELIVERED: "success",
+  CANCELLED: "danger",
+};
+
+export const CHALLAN_STATUS_LABELS: Record<ChallanStatus, string> = {
+  DRAFT: "Draft",
+  GENERATED: "Generated",
+  READY_FOR_DELIVERY: "Ready for Delivery",
+  PARTIALLY_DELIVERED: "Partially Delivered",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+};
+
 export const PAYMENT_STATUS_TONE: Record<string, BadgeTone> = {
   UNPAID: "danger",
   PARTIALLY_PAID: "warning",
@@ -402,6 +421,7 @@ export function toneFor(value: string | null | undefined): BadgeTone {
     GARMENT_STATUS_TONE[value as GarmentStatus] ??
     TASK_STATUS_TONE[value as TaskStatus] ??
     DELIVERY_STATUS_TONE[value] ??
+    CHALLAN_STATUS_TONE[value as ChallanStatus] ??
     GENERIC_TONE[value] ??
     "neutral"
   );

@@ -90,17 +90,20 @@ export function ChallanPrintView({ challan }: ChallanPrintProps) {
         <div className="flex justify-between items-start border-b-2 border-emerald-800 pb-4 mb-6">
           <div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-800 text-white flex items-center justify-center font-bold text-lg">
-                A
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="AURCLEAN" className="w-10 h-10 object-contain" />
               <h1 className="text-2xl font-black text-emerald-950 tracking-tight">AURCLEAN</h1>
             </div>
             <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider mt-0.5">
               Laundry Management ERP
             </p>
-            <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
-              {challan.branch?.name || "Main Processing Branch"} • Phone: {challan.branch?.phone || "+91 9876543210"}
-            </p>
+            {challan.branch?.name || challan.branch?.phone ? (
+              <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
+                {[challan.branch?.name, challan.branch?.phone ? `Phone: ${challan.branch.phone}` : null]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            ) : null}
           </div>
 
           <div className="text-right">
