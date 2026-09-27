@@ -265,6 +265,7 @@ export class PDFDocumentBuilder {
    */
   renderItemsTable(columns: PDFTableColumn[], rows: PDFTableRow[]) {
     const tableTop = this.currentY;
+    const MAX_USABLE_Y = 750;
 
     // Compute column pixel widths
     const widths = columns.map((col) => (col.width / 100) * this.contentWidth);
@@ -294,14 +295,15 @@ export class PDFDocumentBuilder {
     let y = renderTableHeader(tableTop);
 
     rows.forEach((row, rowIdx) => {
-      // Page Break Check
-      if (y > this.pageHeight - 120) {
+      const rowHeight = 20;
+
+      // Page Break Check: move row to next page if it exceeds max usable height
+      if (y + rowHeight > MAX_USABLE_Y) {
         this.doc.addPage();
         this.currentY = this.margin;
         y = renderTableHeader(this.margin);
       }
 
-      const rowHeight = 20;
       const bg = rowIdx % 2 === 0 ? COLORS.white : COLORS.lightBg;
 
       this.doc.rect(this.margin, y, this.contentWidth, rowHeight).fill(bg);
@@ -353,8 +355,21 @@ export class PDFDocumentBuilder {
     const boxWidth = 220;
     const startX = this.margin + this.contentWidth - boxWidth;
     let y = this.currentY;
+    const MAX_USABLE_Y = 750;
 
-    if (y > this.pageHeight - 180) {
+    // Dynamically calculate exact height of totals block
+    let lineCount = 2; // Subtotal + Grand Total
+    if (totals.discount && totals.discount > 0) lineCount++;
+    if (totals.gstAmount && totals.gstAmount > 0) lineCount++;
+    if (totals.paidAmount !== undefined) lineCount++;
+    if (totals.balanceAmount !== undefined) lineCount++;
+
+    const totalsHeight = lineCount * 16 + 10 + 16;
+    const signaturesHeight = 95;
+
+    // Check if totals block fits on current page.
+    // If table is substantial (y > 520) and totals + signatures will overflow, move totals & signatures together to next page.
+    if (y + totalsHeight > MAX_USABLE_Y || (y > 520 && y + totalsHeight + signaturesHeight > MAX_USABLE_Y)) {
       this.doc.addPage();
       y = this.margin;
     }
@@ -415,8 +430,10 @@ export class PDFDocumentBuilder {
     signatures?: Array<{ title: string; name?: string }>;
   }) {
     let y = this.currentY;
+    const MAX_USABLE_Y = 750;
+    const blockHeight = 95;
 
-    if (y > this.pageHeight - 140) {
+    if (y + blockHeight > MAX_USABLE_Y) {
       this.doc.addPage();
       y = this.margin;
     }
