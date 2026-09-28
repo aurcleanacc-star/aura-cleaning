@@ -103,6 +103,10 @@ export function WhatsAppComposerDialog({
     messageText: customText,
   });
 
+  const formattedPhoneDigits = phone.replace(/\D/g, "");
+  const cleanPhone = formattedPhoneDigits.length === 10 ? `91${formattedPhoneDigits}` : formattedPhoneDigits;
+  const directWaUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(interpolated)}`;
+
   const handleSend = () => {
     startTransition(async () => {
       const res = await sendWhatsAppAction({
@@ -116,10 +120,18 @@ export function WhatsAppComposerDialog({
       });
 
       if (res.ok) {
-        toast.success(`WhatsApp message sent to ${customerName} (${phone})`);
+        toast.success(`WhatsApp message dispatched to ${customerName} (${phone})`);
         onOpenChange(false);
       } else {
-        toast.error(res.error || "Failed to send WhatsApp message");
+        const errorMsg = res.error ? res.error.split(" [FALLBACK_URL:")[0] : "Gateway dispatch unavailable";
+        toast.error(errorMsg, {
+          description: "Use direct WhatsApp Web / App link to send pre-filled message",
+          action: {
+            label: "Open WhatsApp",
+            onClick: () => window.open(directWaUrl, "_blank"),
+          },
+          duration: 8000,
+        });
       }
     });
   };
@@ -200,28 +212,41 @@ export function WhatsAppComposerDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t">
           <Button
+            type="button"
+            variant="outline"
             size="sm"
-            onClick={handleSend}
-            disabled={pending}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-md shadow-emerald-950/20"
+            onClick={() => window.open(directWaUrl, "_blank")}
+            className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 text-xs font-semibold"
           >
-            {pending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Sending...
-              </>
-            ) : (
-              <>
-                <Send className="size-4" /> Send WhatsApp
-              </>
-            )}
+            Open Web / App ↗
           </Button>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSend}
+              disabled={pending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-md shadow-emerald-950/20"
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="size-4" /> Send Automated
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+

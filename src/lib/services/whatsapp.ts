@@ -95,9 +95,24 @@ const DEFAULT_TEMPLATES: Record<WhatsAppMessageType, { name: string; body: strin
 /** Formats local or international phone numbers */
 export function formatWhatsAppPhone(phone: string): string {
   if (!phone) return "";
-  const digits = phone.replace(/\D/g, "");
+  let digits = phone.replace(/\D/g, "");
   if (!digits) return "";
-  if (digits.length === 10) return `91${digits}`;
+
+  // Strip leading 0 if 11 digits (e.g. 09876543210 -> 9876543210)
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+
+  // Handle 10-digit Indian numbers -> add 91
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+
+  // Handle 13-digit numbers starting with 910 (e.g. 9109876543210 -> 919876543210)
+  if (digits.length === 13 && digits.startsWith("910")) {
+    return `91${digits.slice(3)}`;
+  }
+
   return digits;
 }
 
@@ -112,7 +127,7 @@ async function fetchOpenWa(
     timeoutMs?: number;
   } = {},
 ): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
-  const timeoutMs = options.timeoutMs ?? 5000;
+  const timeoutMs = options.timeoutMs ?? 10000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -170,10 +185,10 @@ async function resolveOpenWaSessionId(): Promise<{ sessionId: string | null; ope
   }
 
   // Session discovery via OpenWA sessions endpoint
-  const res = await fetchOpenWa("/api/sessions");
+  const res = await fetchOpenWa("/api/sessions", { timeoutMs: 4000 });
   if (!res.ok) {
     // Check root health endpoint as fallback
-    const health = await fetchOpenWa("/api/health");
+    const health = await fetchOpenWa("/api/health", { timeoutMs: 3000 });
     if (!health.ok && res.status === 503) {
       return { sessionId: null, openWaOk: false, error: "OpenWA service is unavailable" };
     }
@@ -182,7 +197,7 @@ async function resolveOpenWaSessionId(): Promise<{ sessionId: string | null; ope
 
   const sessions = Array.isArray(res.data) ? res.data : res.data?.sessions || [];
   if (sessions.length > 0) {
-    const active = sessions.find((s: any) => s.status === "ready" || s.state === "CONNECTED") || sessions[0];
+    const active = sessions.find((s: any) => s.status === "ready" || s.state === "CONNECTED" || s.status === "working") || sessions[0];
     const id = active?.sessionId || active?.id || active?.name || "aurclean_session";
     return { sessionId: id, openWaOk: true };
   }
@@ -225,7 +240,6 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
   // Step 2: Resolve OpenWA session ID & test OpenWA reachability
   const discovery = await resolveOpenWaSessionId();
   if (!discovery.openWaOk) {
-    // Record in local cache
     await prisma.whatsAppSession.upsert({
       where: { sessionName: CONFIG_SESSION_ID || "aurclean_session" },
       create: { sessionName: CONFIG_SESSION_ID || "aurclean_session", isConnected: false, apiStatus: "OPENWA_UNAVAILABLE" },
@@ -251,18 +265,16 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
   const sessionId = discovery.sessionId || "aurclean_session";
 
   // Step 3: Fetch real session status from OpenWA API
-  // Endpoints tried in order: /api/sessions/{sessionId}, /api/session/status, /api/check-auth
   let rawStatus = "";
   let rawPhone: string | null = null;
   let rawQr: string | null = null;
   let rawError: string | null = null;
 
-  const sessionRes = await fetchOpenWa(`/api/sessions/${sessionId}`);
+  const sessionRes = await fetchOpenWa(`/api/sessions/${sessionId}`, { timeoutMs: 5000 });
   let responseData = sessionRes.data;
 
   if (!sessionRes.ok) {
-    // Try alternate standard OpenWA status endpoint
-    const altRes = await fetchOpenWa("/api/session/status");
+    const altRes = await fetchOpenWa("/api/session/status", { timeoutMs: 5000 });
     if (!altRes.ok && sessionRes.status === 503) {
       return {
         success: true,
@@ -283,17 +295,17 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     }
   }
 
-  // Normalize real status returned by OpenWA
+  // Normalize real status returned by OpenWA across different implementations
   if (responseData) {
-    rawStatus = (
+    rawStatus = String(
       responseData.status ||
       responseData.state ||
       responseData.sessionStatus ||
+      responseData.session ||
       (responseData.isLoggedIn ? "ready" : "") ||
       ""
     ).toLowerCase();
 
-    // Extract real phone number if provided by OpenWA
     const phoneRaw =
       responseData.phoneNumber ||
       responseData.phone ||
@@ -309,16 +321,14 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
       }
     }
 
-    // Extract real QR code if provided
     rawQr = responseData.qrCode || responseData.qr || responseData.base64 || null;
     if (rawQr && typeof rawQr === "string" && !rawQr.startsWith("data:")) {
       rawQr = `data:image/png;base64,${rawQr}`;
     }
   }
 
-  // If status is qr_ready, attempt to fetch real QR code from /api/sessions/{sessionId}/qr if not already present
   if ((rawStatus === "qr_ready" || rawStatus === "qr_waiting" || rawStatus === "unpaired") && !rawQr) {
-    const qrRes = await fetchOpenWa(`/api/sessions/${sessionId}/qr`);
+    const qrRes = await fetchOpenWa(`/api/sessions/${sessionId}/qr`, { timeoutMs: 5000 });
     if (qrRes.ok && qrRes.data) {
       const qrVal = qrRes.data.qrCode || qrRes.data.qr || qrRes.data.base64 || qrRes.data.image || null;
       if (qrVal && typeof qrVal === "string") {
@@ -329,10 +339,36 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     }
   }
 
-  // Map to exact required session status values:
-  // initializing | qr_ready | authenticating | ready | disconnected | failed | action_required
+  const connectedTokens = [
+    "ready",
+    "connected",
+    "paired",
+    "working",
+    "inchat",
+    "islogged",
+    "isloggedin",
+    "authenticated",
+    "online",
+    "active",
+    "success",
+    "open",
+    "login",
+    "logged_in",
+    "main",
+  ];
+
+  const isActuallyConnected =
+    connectedTokens.some((token) => rawStatus.includes(token)) ||
+    responseData?.isLoggedIn === true ||
+    responseData?.connected === true ||
+    responseData?.authenticated === true ||
+    responseData?.state === "CONNECTED" ||
+    responseData?.state === "CONNECTED_SESSION" ||
+    responseData?.status === "CONNECTED" ||
+    responseData?.sessionStatus === "WORKING";
+
   let mappedStatus: OpenWaSessionStatus = "disconnected";
-  if (rawStatus === "ready" || rawStatus === "connected" || rawStatus === "paired" || responseData?.isLoggedIn === true) {
+  if (isActuallyConnected) {
     mappedStatus = "ready";
   } else if (rawStatus === "qr_ready" || rawStatus === "qr_waiting" || rawStatus === "unpaired" || rawQr) {
     mappedStatus = "qr_ready";
@@ -348,9 +384,6 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     mappedStatus = "disconnected";
   }
 
-  const isActuallyConnected = mappedStatus === "ready";
-
-  // Step 4: Sync real ground truth into database cache
   try {
     await prisma.whatsAppSession.upsert({
       where: { sessionName: sessionId },
@@ -397,34 +430,31 @@ export async function connectWhatsAppSession(): Promise<WhatsAppStatusResponse> 
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
-  // Check OpenWA availability first
-  const health = await fetchOpenWa("/api/health");
+  const health = await fetchOpenWa("/api/health", { timeoutMs: 3000 });
   if (!health.ok) {
-    const rootCheck = await fetchOpenWa("/");
+    const rootCheck = await fetchOpenWa("/", { timeoutMs: 3000 });
     if (!rootCheck.ok) {
       return getWhatsAppStatus({ forceRefresh: true });
     }
   }
 
-  // Request OpenWA to start/create session
-  let startRes = await fetchOpenWa(`/api/sessions/${sessionId}/start`, { method: "POST" });
+  let startRes = await fetchOpenWa(`/api/sessions/${sessionId}/start`, { method: "POST", timeoutMs: 8000 });
   if (!startRes.ok) {
-    // Try POST /api/sessions
     startRes = await fetchOpenWa("/api/sessions", {
       method: "POST",
       body: { name: sessionId, sessionId },
+      timeoutMs: 8000,
     });
   }
 
   if (!startRes.ok) {
-    // Try POST /api/session/start
     startRes = await fetchOpenWa("/api/session/start", {
       method: "POST",
       body: { session: sessionId },
+      timeoutMs: 8000,
     });
   }
 
-  // Query live status after request
   return getWhatsAppStatus({ forceRefresh: true });
 }
 
@@ -435,8 +465,8 @@ export async function reconnectWhatsAppSession(): Promise<WhatsAppStatusResponse
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
-  await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST" });
-  await fetchOpenWa(`/api/sessions/${sessionId}/restart`, { method: "POST" });
+  await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST", timeoutMs: 5000 });
+  await fetchOpenWa(`/api/sessions/${sessionId}/restart`, { method: "POST", timeoutMs: 8000 });
 
   return connectWhatsAppSession();
 }
@@ -448,8 +478,8 @@ export async function disconnectWhatsAppSession(): Promise<WhatsAppStatusRespons
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
-  await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST" });
-  await fetchOpenWa(`/api/sessions/${sessionId}`, { method: "DELETE" });
+  await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST", timeoutMs: 5000 });
+  await fetchOpenWa(`/api/sessions/${sessionId}`, { method: "DELETE", timeoutMs: 5000 });
 
   try {
     await prisma.whatsAppSession.upsert({
@@ -471,6 +501,7 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
   success: boolean;
   messageId: string;
   status: WhatsAppMessageStatus;
+  whatsappWebUrl?: string;
   error?: string;
 }> {
   const formattedPhone = formatWhatsAppPhone(params.phone);
@@ -478,13 +509,12 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     throw new Error("Invalid phone number provided for WhatsApp message delivery.");
   }
 
-  // Verify real session status before sending
-  const current = await getWhatsAppStatus({ forceRefresh: true });
-  if (!current.connected || current.status !== "ready") {
-    throw new Error(`WhatsApp is not connected (Status: ${current.status}). Please connect WhatsApp in Settings.`);
-  }
+  const whatsappWebUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(params.messageText)}`;
 
-  const sessionId = current.sessionId || "aurclean_session";
+  // Dynamic session resolution without blocking on heavy forceRefresh status checks
+  const sessionInfo = await resolveOpenWaSessionId();
+  const sessionId = sessionInfo.sessionId || CONFIG_SESSION_ID || "aurclean_session";
+
   const recipientJid = `${formattedPhone}@c.us`;
 
   let externalId: string | null = null;
@@ -494,36 +524,53 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
   const payload = params.documentBase64
     ? {
         to: formattedPhone,
+        phone: formattedPhone,
         chatId: recipientJid,
         filename: params.documentName || "document.pdf",
         caption: params.messageText,
         file: params.documentBase64,
         base64: params.documentBase64,
+        path: params.documentName || "document.pdf",
       }
     : {
         to: formattedPhone,
+        phone: formattedPhone,
         chatId: recipientJid,
         text: params.messageText,
         message: params.messageText,
+        body: params.messageText,
       };
 
-  const endpoint = params.documentBase64
+  const primaryEndpoint = params.documentBase64
     ? `/api/sessions/${sessionId}/files`
     : `/api/sessions/${sessionId}/messages`;
 
-  let sendRes = await fetchOpenWa(endpoint, {
+  // Attempt 1: Primary session endpoint
+  let sendRes = await fetchOpenWa(primaryEndpoint, {
     method: "POST",
     body: payload,
-    timeoutMs: 12000,
+    timeoutMs: 15000,
   });
 
+  // Attempt 2: Standard REST endpoints
   if (!sendRes.ok) {
-    // Fallback to standard OpenWA REST endpoints
     const altEndpoint = params.documentBase64 ? "/api/sendFile" : "/api/sendText";
     sendRes = await fetchOpenWa(altEndpoint, {
       method: "POST",
       body: payload,
-      timeoutMs: 12000,
+      timeoutMs: 15000,
+    });
+  }
+
+  // Attempt 3: Additional session endpoint syntax
+  if (!sendRes.ok) {
+    const altEndpoint2 = params.documentBase64
+      ? `/api/sendFileBase64`
+      : `/api/${sessionId}/send-message`;
+    sendRes = await fetchOpenWa(altEndpoint2, {
+      method: "POST",
+      body: payload,
+      timeoutMs: 15000,
     });
   }
 
@@ -531,6 +578,13 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     const data = sendRes.data;
     externalId = data.id || data.messageId || data.msgId || null;
     status = "DELIVERED";
+
+    // Auto-update session cache to CONNECTED since send succeeded
+    prisma.whatsAppSession.upsert({
+      where: { sessionName: sessionId },
+      create: { sessionName: sessionId, isConnected: true, apiStatus: "READY", lastConnectedAt: new Date() },
+      update: { isConnected: true, apiStatus: "READY", lastConnectedAt: new Date() },
+    }).catch(() => null);
   } else {
     status = "FAILED";
     errorMessage = sendRes.error || "OpenWA API returned message delivery failure";
@@ -564,13 +618,16 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
   }
 
   if (status === "FAILED") {
-    throw new Error(errorMessage || "Failed to dispatch message via OpenWA");
+    throw new Error(
+      `${errorMessage || "Failed to dispatch message via OpenWA Gateway."} [FALLBACK_URL:${whatsappWebUrl}]`,
+    );
   }
 
   return {
     success: true,
     messageId: log.id,
     status: log.status,
+    whatsappWebUrl,
   };
 }
 

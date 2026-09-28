@@ -41,15 +41,8 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
 }> {
   const { documentType, documentId, phone, sentByUserId, customCaption } = params;
 
-  // Verify WhatsApp Gateway Status
-  const waStatus = await getWhatsAppStatus({ forceRefresh: true });
-  if (!waStatus.connected || waStatus.status !== "ready") {
-    throw new Error(
-      `WhatsApp Gateway is disconnected (Current status: ${waStatus.status}). Please check OpenWA in Settings -> WhatsApp.`,
-    );
-  }
-
   // 1. Generate real PDF Buffer & File Name based on document type
+
   let pdfResult: { buffer: Buffer; fileName: string };
   let targetPhone = phone || "";
   let customerId: string | null = null;
