@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getWhatsAppStatus } from "@/lib/services/whatsapp";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Health Check API for WhatsApp Integration
  * Returns health status of ERP database, OpenWA Gateway service, and active Session

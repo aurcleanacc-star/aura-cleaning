@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { sendDocumentWhatsAppAction } from "@/app/api/documents/actions";
+import { formatWhatsAppPhone } from "@/lib/whatsapp-templates";
 import type { DocumentType } from "@/lib/pdf/types";
 
 interface DocumentActionBarProps {
@@ -54,15 +55,24 @@ export function DocumentActionBar({
         setStatusStep("Sent successfully!");
         toast.success(`PDF document ${res.fileName} sent to ${customerPhone} via WhatsApp!`);
       } else {
-        setStatusStep("Sending failed");
-        toast.error(res.error || "Failed to deliver WhatsApp PDF document.");
+        setStatusStep("Gateway unavailable");
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone || "")}?text=${encodeURIComponent(`Hello ${customerName || 'Customer'},\n\nPlease find your ${documentType.replace(/_/g, " ")} #${documentNumber} attached.\n\nThank you,\nAURCLEAN`)}`;
+
+        toast.error("OpenWA Gateway Server Unavailable", {
+          description: "Click below to send via WhatsApp Web / App directly",
+          action: {
+            label: "Open WhatsApp Web ↗",
+            onClick: () => window.open(fallbackUrl, "_blank"),
+          },
+          duration: 10000,
+        });
       }
     } catch (err: any) {
       setStatusStep("Sending failed");
       toast.error(err?.message || "WhatsApp sending error");
     } finally {
       setSendingWa(false);
-      setTimeout(() => setStatusStep(""), 4000);
+      setTimeout(() => setStatusStep(""), 5000);
     }
   };
 

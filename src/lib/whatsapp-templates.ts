@@ -18,7 +18,13 @@ export function formatWhatsAppPhone(phone: string): string {
   if (digits.length === 11 && digits.startsWith("0")) {
     digits = digits.slice(1);
   }
-  return digits.length === 10 ? `91${digits}` : digits;
+  if (digits.length === 10) return `91${digits}`;
+  // A double-prefixed number ("9109876543210" — "91" + "0" + the 10-digit
+  // number) collapses to the same "91XXXXXXXXXX" shape.
+  if (digits.length === 13 && digits.startsWith("910")) {
+    return `91${digits.slice(3)}`;
+  }
+  return digits;
 }
 
 /**

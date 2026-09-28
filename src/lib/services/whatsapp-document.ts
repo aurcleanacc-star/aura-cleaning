@@ -41,7 +41,11 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
 }> {
   const { documentType, documentId, phone, sentByUserId, customCaption } = params;
 
-  // Verify WhatsApp Gateway Status
+  // Fail fast, before spending time generating a PDF nobody can receive yet.
+  // sendWhatsAppMessage() re-checks this immediately before its own send
+  // attempt too — session state can change in the seconds it takes to
+  // render a large document — but there is no reason to build the PDF at
+  // all when the gateway is already known to be down.
   const waStatus = await getWhatsAppStatus({ forceRefresh: true });
   if (!waStatus.connected || waStatus.status !== "ready") {
     throw new Error(
@@ -50,6 +54,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
   }
 
   // 1. Generate real PDF Buffer & File Name based on document type
+
   let pdfResult: { buffer: Buffer; fileName: string };
   let targetPhone = phone || "";
   let customerId: string | null = null;

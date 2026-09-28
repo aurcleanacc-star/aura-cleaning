@@ -13,6 +13,7 @@ import { CHALLAN_STATUS_LABELS } from "@/lib/workflow";
 import { toast } from "sonner";
 import { createDeliveryChallanAction, updateChallanStatusAction } from "@/app/(app)/delivery-challans/actions";
 import { sendDocumentWhatsAppAction } from "@/app/api/documents/actions";
+import { formatWhatsAppPhone } from "@/lib/whatsapp-templates";
 import type { ChallanStatus } from "@/generated/prisma/client";
 
 interface ChallanSummary {
@@ -78,7 +79,16 @@ export function OrderDeliveryChallanSection({
       if (res.success) {
         toast.success(`Delivery Challan sent to ${customerPhone} via WhatsApp!`);
       } else {
-        toast.error(res.error || "Failed to send WhatsApp");
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone)}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your AURCLEAN Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you,\nAURCLEAN`)}`;
+
+        toast.error("OpenWA Gateway Endpoint Unavailable", {
+          description: "Click below to send via WhatsApp Web / App directly",
+          action: {
+            label: "Open WhatsApp Web ↗",
+            onClick: () => window.open(fallbackUrl, "_blank"),
+          },
+          duration: 10000,
+        });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "WhatsApp delivery error");
