@@ -1,15 +1,45 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
 import { recordAudit } from "@/lib/audit";
+import { formatWhatsAppPhone, interpolateWhatsAppTemplate } from "@/lib/whatsapp-templates";
 import type { WhatsAppMessageStatus, WhatsAppMessageType } from "@/generated/prisma/client";
+
+export { formatWhatsAppPhone, interpolateWhatsAppTemplate };
 
 // Server-only OpenWA environment configuration
 const OPENWA_BASE_URL = (process.env.OPENWA_BASE_URL || process.env.OPENWA_API_URL || "http://localhost:8080").replace(/\/$/, "");
 const OPENWA_API_KEY = process.env.OPENWA_API_KEY || "aurclean_secret_key";
 const CONFIG_SESSION_ID = process.env.OPENWA_SESSION_ID || process.env.OPENWA_SESSION || null;
+
+/**
+ * Maps an OpenWA HTTP status code to a message staff can act on, so a 401
+ * (bad API key) doesn't read the same as a 429 (rate limited, try again) or
+ * a 500 (gateway's own fault). Falls back to whatever the gateway itself
+ * said, since that's more specific than a generic per-code message.
+ */
+function describeOpenWaError(status: number, gatewayMessage?: string | null): string {
+  switch (status) {
+    case 401:
+    case 403:
+      return "WhatsApp gateway authentication failed. Check the configured OpenWA API key.";
+    case 404:
+      return "WhatsApp session not found on the gateway. It may need to be reconnected.";
+    case 409:
+      return "WhatsApp session is not ready. Connect WhatsApp in Settings before sending.";
+    case 413:
+      return "Document is too large to send over WhatsApp.";
+    case 429:
+      return "WhatsApp gateway rate limit reached. Please try again shortly.";
+    case 500:
+      return "WhatsApp gateway encountered an internal error.";
+    case 503:
+    case 504:
+      return "WhatsApp gateway is unreachable. Confirm the OpenWA service is running.";
+    default:
+      return gatewayMessage || `WhatsApp gateway returned an unexpected error (HTTP ${status}).`;
+  }
+}
 
 export type OpenWaSessionStatus =
   | "initializing"
@@ -91,15 +121,6 @@ const DEFAULT_TEMPLATES: Record<WhatsAppMessageType, { name: string; body: strin
     body: "Hi {{customerName}},\n\n{{messageText}}\n\nRegards,\n{{businessName}}",
   },
 };
-
-/** Formats local or international phone numbers */
-export function formatWhatsAppPhone(phone: string): string {
-  if (!phone) return "";
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.length === 10) return `91${digits}`;
-  return digits;
-}
 
 /**
  * Executes a secure server-side HTTP fetch call to OpenWA API
@@ -429,14 +450,16 @@ export async function connectWhatsAppSession(): Promise<WhatsAppStatusResponse> 
 }
 
 /**
- * Force restarts session with OpenWA API
+ * Reconnects a session by logging it out then starting a fresh connection.
+ * The gateway (scripts/openwa-server.mjs) does not implement a /restart
+ * endpoint — only logout and start — so this composes those two real calls
+ * instead of hitting a route that would 404.
  */
 export async function reconnectWhatsAppSession(): Promise<WhatsAppStatusResponse> {
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
   await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST" });
-  await fetchOpenWa(`/api/sessions/${sessionId}/restart`, { method: "POST" });
 
   return connectWhatsAppSession();
 }
@@ -530,10 +553,14 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
   if (sendRes.ok && sendRes.data) {
     const data = sendRes.data;
     externalId = data.id || data.messageId || data.msgId || null;
-    status = "DELIVERED";
+    // The gateway only confirms the message was handed to WhatsApp's servers
+    // (its own response says "SENT") — not that the recipient's device has
+    // received or read it. DELIVERED/READ are reserved for the webhook
+    // handler to set if a real delivery/read receipt ever arrives.
+    status = "SENT";
   } else {
     status = "FAILED";
-    errorMessage = sendRes.error || "OpenWA API returned message delivery failure";
+    errorMessage = describeOpenWaError(sendRes.status, sendRes.error);
   }
 
   // Record immutable database audit log
@@ -572,38 +599,6 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     messageId: log.id,
     status: log.status,
   };
-}
-
-/** Interpolates variables into editable message templates */
-export function interpolateWhatsAppTemplate(
-  templateBody: string,
-  variables: {
-    customerName?: string;
-    orderId?: string;
-    invoiceNumber?: string;
-    challanNumber?: string;
-    total?: number;
-    paid?: number;
-    balance?: number;
-    deliveryDate?: string | Date;
-    businessName?: string;
-    messageText?: string;
-  },
-): string {
-  return templateBody
-    .replace(/\{\{customerName\}\}/g, variables.customerName || "Valued Customer")
-    .replace(/\{\{orderId\}\}/g, variables.orderId || "ORD-XXXX")
-    .replace(/\{\{invoiceNumber\}\}/g, variables.invoiceNumber || variables.orderId || "INV-XXXX")
-    .replace(/\{\{challanNumber\}\}/g, variables.challanNumber || "DC-XXXX")
-    .replace(/\{\{total\}\}/g, formatCurrency(variables.total ?? 0))
-    .replace(/\{\{paid\}\}/g, formatCurrency(variables.paid ?? 0))
-    .replace(/\{\{balance\}\}/g, formatCurrency(variables.balance ?? 0))
-    .replace(
-      /\{\{deliveryDate\}\}/g,
-      variables.deliveryDate ? formatDate(variables.deliveryDate) : "Scheduled Date",
-    )
-    .replace(/\{\{businessName\}\}/g, variables.businessName || "AURCLEAN")
-    .replace(/\{\{messageText\}\}/g, variables.messageText || "");
 }
 
 /** Retrieves or initializes templates in database */

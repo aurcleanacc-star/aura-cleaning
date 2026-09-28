@@ -33,7 +33,10 @@ async function startWhatsAppSocket() {
     sock = makeWASocket({
       version,
       auth: state,
-      printQRInTerminal: true,
+      // QR is handled below via the connection.update listener (rendered to
+      // a data URL and served over the REST API) — printQRInTerminal is a
+      // deprecated Baileys option that only logs the raw QR to the process's
+      // own terminal and does nothing this server needs.
       browser: ["AURCLEAN ERP", "Chrome", "1.0.0"],
       connectTimeoutMs: 30000,
       defaultQueryTimeoutMs: 30000,

@@ -93,8 +93,14 @@ export function WhatsAppComposerDialog({
   const currentBody = getTemplateBody(messageType);
   const interpolated = interpolateWhatsAppTemplate(currentBody, {
     customerName,
-    orderId: orderNumber || orderId || "ORD-1024",
-    invoiceNumber: orderNumber ? `INV-${orderNumber.replace(/[^0-9]/g, "")}` : "INV-1024",
+    // No fabricated "ORD-1024"/"INV-1024" fallback: this dialog is also
+    // opened with no order context at all (e.g. the Customer profile's
+    // generic "Send WhatsApp" button), and a plausible-looking fake
+    // reference number in that preview could get sent to a real customer.
+    // Leaving these undefined lets interpolateWhatsAppTemplate's own
+    // obviously-a-placeholder "ORD-XXXX"/"INV-XXXX" fallback show instead.
+    orderId: orderNumber || orderId || undefined,
+    invoiceNumber: orderNumber ? `INV-${orderNumber.replace(/[^0-9]/g, "")}` : undefined,
     total: totalAmount,
     paid: paidAmount,
     balance: outstandingAmount,

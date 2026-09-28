@@ -374,6 +374,7 @@ export default async function CustomerProfilePage({
             phone={customer.phone}
             customerId={customer.id}
             label="Send WhatsApp"
+            initialType="CUSTOM"
           />
         </CardHeader>
         <CardContent>
