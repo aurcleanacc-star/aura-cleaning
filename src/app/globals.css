@@ -3,59 +3,66 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
+  --radius: 1rem;
 
-  --background: #f8faf9;
-  --foreground: #0f172a;
+  /* AURCLEAN is an all-white interface — cards/sidebar/header/forms/tables all
+     share this same white, separated only by subtle borders and shadows. */
+  --background: #ffffff;
+  --foreground: #101828;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #101828;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #101828;
 
-  /* AURCLEAN Deep Forest Green Primary */
-  --primary: #0a3b2c;
+  /* Dark navy — active nav, primary buttons, selected tabs */
+  --primary: #101828;
   --primary-foreground: #ffffff;
 
-  /* AURCLEAN Fresh Emerald Secondary */
-  --secondary: #ecfdf5;
-  --secondary-foreground: #065f46;
+  /* Very light neutral gray secondary surface (buttons, quiet fills) */
+  --secondary: #f4f5f7;
+  --secondary-foreground: #1e293b;
 
-  --muted: #f1f5f9;
+  --muted: #f6f7f9;
   --muted-foreground: #64748b;
 
-  /* AURCLEAN Bright Green Accent */
-  --accent: #d1fae5;
-  --accent-foreground: #047857;
+  --accent: #f1f3f6;
+  --accent-foreground: #101828;
+
+  /* AURCLEAN forest-green brand accent — logo mark, brand highlights only */
+  --brand: #0a3b2c;
+  --brand-foreground: #ffffff;
 
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #0d7857;
+  --border: #e6e8eb;
+  --input: #e6e8eb;
+  --ring: #101828;
 
-  --success: #10b981;
+  /* AURCLEAN emerald — success states double as the brand's positive accent */
+  --success: #0f9d67;
   --success-foreground: #ffffff;
   --warning: #f59e0b;
   --warning-foreground: #78350f;
   --info: #0284c7;
   --info-foreground: #ffffff;
 
-  /* Deep Forest Green Sidebar */
-  --sidebar: #06261c;
-  --sidebar-foreground: #ecfdf5;
+  /* Floating white sidebar card */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #101828;
   --sidebar-muted: #94a3b8;
-  --sidebar-accent: #0b4a36;
-  --sidebar-border: #0a3b2c;
+  --sidebar-accent: #101828;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-hover: #f6f7f9;
+  --sidebar-border: #edeef1;
 
-  /* Brand charts: Forest, Emerald, Mint, Amber, Teal, Slate */
-  --chart-1: #0a3b2c;
-  --chart-2: #10b981;
+  --chart-1: #101828;
+  --chart-2: #0f9d67;
   --chart-3: #34d399;
   --chart-4: #f59e0b;
   --chart-5: #0284c7;
-  --chart-6: #065f46;
-  --chart-grid: #e2e8f0;
+  --chart-6: #0a3b2c;
+  --chart-grid: #e6e8eb;
   --chart-surface: #ffffff;
 }
 
@@ -79,6 +86,9 @@
   --accent: #065f46;
   --accent-foreground: #d1fae5;
 
+  --brand: #10b981;
+  --brand-foreground: #06261c;
+
   --destructive: #f87171;
   --destructive-foreground: #061e16;
 
@@ -94,6 +104,8 @@
   --sidebar-foreground: #f8faf9;
   --sidebar-muted: #94a3b8;
   --sidebar-accent: #0b3d2e;
+  --sidebar-accent-foreground: #f8faf9;
+  --sidebar-hover: #0b3d2e;
   --sidebar-border: #092c21;
 
   --chart-1: #10b981;
@@ -121,6 +133,8 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
@@ -136,6 +150,8 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-border: var(--sidebar-border);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

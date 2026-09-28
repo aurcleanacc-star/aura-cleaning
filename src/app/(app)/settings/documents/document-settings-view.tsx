@@ -40,25 +40,25 @@ export function DocumentSettingsView({ initialSettings }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-emerald-800" /> Document & PDF Settings
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <FileText className="size-6 text-primary" /> Document & PDF Settings
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="mt-1 text-xs text-muted-foreground">
             Configure company branding, address, document prefixes, and terms used across all generated PDF documents.
           </p>
         </div>
-        <Button type="submit" disabled={loading} className="bg-emerald-700 hover:bg-emerald-800 text-white gap-2 shadow-sm">
-          <Save className="w-4 h-4" /> {loading ? "Saving..." : "Save Settings"}
+        <Button type="submit" disabled={loading} loading={loading} className="gap-2">
+          <Save className="size-4" /> {loading ? "Saving..." : "Save Settings"}
         </Button>
       </div>
 
       {/* Company Profile Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-slate-800">
-            <Building2 className="w-4 h-4 text-emerald-700" /> Company Profile & Branding
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Building2 className="size-4 text-primary" /> Company Profile & Branding
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -129,8 +129,8 @@ export function DocumentSettingsView({ initialSettings }: Props) {
       {/* Document Prefixes Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-slate-800">
-            <Sliders className="w-4 h-4 text-emerald-700" /> Document Numbering Prefixes
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sliders className="size-4 text-primary" /> Document Numbering Prefixes
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -167,8 +167,8 @@ export function DocumentSettingsView({ initialSettings }: Props) {
       {/* Terms & Footer Text Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-slate-800">
-            <ShieldCheck className="w-4 h-4 text-emerald-700" /> Standard Terms & Footer Notes
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="size-4 text-primary" /> Standard Terms & Footer Notes
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -196,7 +196,7 @@ export function DocumentSettingsView({ initialSettings }: Props) {
       </Card>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={loading} size="lg" className="bg-emerald-700 hover:bg-emerald-800 text-white gap-2 shadow">
+        <Button type="submit" disabled={loading} loading={loading} size="lg" className="gap-2">
           <Save className="w-4 h-4" /> {loading ? "Saving Settings..." : "Save Settings"}
         </Button>
       </div>

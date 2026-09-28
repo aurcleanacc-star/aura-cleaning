@@ -54,17 +54,17 @@ export function FinanceOverviewView({ metrics }: Props) {
         </Link>
 
         <Link href="/finance/bank-accounts" className="group">
-          <Card className="h-full border-blue-500/30 bg-blue-500/5 transition-all hover:border-blue-500/60 hover:shadow-md">
+          <Card className="h-full border-info/30 bg-info/5 transition-all hover:border-info/60 hover:shadow-md">
             <CardHeader className="flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-semibold uppercase text-blue-600 dark:text-blue-400">
+              <CardTitle className="text-xs font-semibold uppercase text-info">
                 Bank Balance
               </CardTitle>
-              <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-info/10 text-info">
                 <Building2 className="size-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
+              <p className="text-2xl font-bold font-mono text-info">
                 {formatCurrency(metrics.bankBalance)}
               </p>
               <p className="text-xs text-muted-foreground mt-1 group-hover:underline">

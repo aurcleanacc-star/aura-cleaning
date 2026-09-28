@@ -57,7 +57,7 @@ export function StatCard({
         </span>
       ) : null}
       <div className="min-w-0 space-y-0.5">
-        <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="line-clamp-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
         <p className="truncate text-2xl font-semibold tracking-tight numeric">

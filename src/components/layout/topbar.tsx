@@ -32,7 +32,7 @@ export function Topbar({
   onOpenSidebar,
 }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:px-4">
+    <header className="sticky top-3 z-30 mb-4 flex h-16 items-center gap-2 rounded-2xl border border-border bg-card px-3 shadow-sm sm:top-4 sm:px-4">
       <Button
         variant="ghost"
         size="icon"
@@ -49,7 +49,7 @@ export function Topbar({
         </Link>
       </div>
 
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <GlobalSearch />
       </div>
 

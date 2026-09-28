@@ -123,10 +123,10 @@ export function FilterBar({
       })}
 
       {showDateRange ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Input
             type="date"
-            className="h-9 w-auto"
+            className="h-9 w-auto min-w-0"
             aria-label="From date"
             value={searchParams.get("from") ?? ""}
             onChange={(event) => apply({ from: event.target.value || null })}
@@ -134,7 +134,7 @@ export function FilterBar({
           <span className="text-sm text-muted-foreground">to</span>
           <Input
             type="date"
-            className="h-9 w-auto"
+            className="h-9 w-auto min-w-0"
             aria-label="To date"
             value={searchParams.get("to") ?? ""}
             onChange={(event) => apply({ to: event.target.value || null })}
