@@ -36,6 +36,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Scanner } from "@/components/shared/scanner";
 import { cn } from "@/lib/utils";
 
+import { scanGarmentAction } from "./actions";
 import { batchScanGarmentAction, fetchBatchExpectedGarmentsAction } from "./batch-actions";
 import type { BatchScanItemResult, ExpectedGarment } from "@/lib/services/batch-scanning";
 
@@ -102,6 +103,8 @@ export function BatchScanner() {
 
   const [inputVal, setInputVal] = useState("");
   const [pending, startTransition] = useTransition();
+  const [contextLocking, startContextTransition] = useTransition();
+  const [lockedOrderNumber, setLockedOrderNumber] = useState<string | null>(null);
 
   const [finished, setFinished] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState<"ALL" | "MISMATCHES" | "MISSING">("ALL");
@@ -190,6 +193,38 @@ export function BatchScanner() {
     setFinished(true);
   };
 
+  const handleLockOrderContext = () => {
+    const value = contextOrderNumber.trim();
+    if (!value || contextLocking) return;
+
+    startContextTransition(async () => {
+      const res = await scanGarmentAction({ code: value, source: "KEYBOARD" });
+      if (!res.ok || !res.data.garment) {
+        toast.error("No order matches that code");
+        return;
+      }
+
+      const { orderId, orderNumber, customerName } = res.data.garment;
+      setContextOrderId(orderId);
+      setLockedOrderNumber(orderNumber);
+      setContextOrderNumber(orderNumber);
+      toast.success(`Batch locked to ${orderNumber} (${customerName})`);
+
+      const expected = await fetchBatchExpectedGarmentsAction({ orderId });
+      if (expected.ok) {
+        setExpectedList(expected.data);
+        setExpectedCountInput(String(expected.data.length));
+      }
+    });
+  };
+
+  const handleClearOrderContext = () => {
+    setContextOrderId(null);
+    setLockedOrderNumber(null);
+    setContextOrderNumber("");
+    setExpectedList([]);
+  };
+
   const expectedNum = parseInt(expectedCountInput, 10) || 0;
   const scannedNum = scans.length;
   const matchedNum = scans.filter((s) => s.outcome === "MATCHED").length;
@@ -197,7 +232,12 @@ export function BatchScanner() {
   const duplicateNum = scans.filter((s) => s.outcome === "DUPLICATE").length;
   const unknownNum = scans.filter((s) => s.outcome === "UNKNOWN").length;
 
-  const remainingNum = Math.max(0, expectedNum ? expectedNum - matchedNum : 0);
+  const matchedCodes = new Set(scans.filter((s) => s.outcome === "MATCHED").map((s) => s.garmentCode));
+  const missingGarments = expectedList.filter((g) => !matchedCodes.has(g.garmentCode));
+
+  const remainingNum = expectedList.length > 0
+    ? missingGarments.length
+    : Math.max(0, expectedNum ? expectedNum - matchedNum : 0);
 
   return (
     <div className="space-y-6">
@@ -291,13 +331,46 @@ export function BatchScanner() {
 
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Order Context (Optional)</Label>
-              <Input
-                value={contextOrderNumber}
-                onChange={(e) => setContextOrderNumber(e.target.value)}
-                placeholder="ORD-1024"
-                className="h-10 font-mono text-sm uppercase bg-background"
-                disabled={active}
-              />
+              {lockedOrderNumber ? (
+                <div className="flex h-10 items-center justify-between rounded-md border border-primary/40 bg-primary/5 px-3">
+                  <span className="truncate font-mono text-sm font-bold text-primary">{lockedOrderNumber}</span>
+                  <button
+                    type="button"
+                    onClick={handleClearOrderContext}
+                    disabled={active}
+                    aria-label="Clear order context"
+                    className="ml-2 shrink-0 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-1.5">
+                  <Input
+                    value={contextOrderNumber}
+                    onChange={(e) => setContextOrderNumber(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleLockOrderContext();
+                      }
+                    }}
+                    placeholder="ORD-1024"
+                    className="h-10 font-mono text-sm uppercase bg-background"
+                    disabled={active || contextLocking}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-10 px-3 font-semibold text-xs whitespace-nowrap"
+                    onClick={handleLockOrderContext}
+                    disabled={active || contextLocking || !contextOrderNumber.trim()}
+                  >
+                    Lock
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-border/80 bg-background p-3">
@@ -601,6 +674,17 @@ export function BatchScanner() {
               {summaryFilter === "MISSING" && (
                 remainingNum === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-6">All expected garments were successfully scanned.</p>
+                ) : missingGarments.length > 0 ? (
+                  <div className="space-y-2">
+                    {missingGarments.map((g) => (
+                      <div key={g.garmentId} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        <span className="font-mono font-bold">
+                          {g.categoryEmoji} {g.garmentCode} — {g.customerName}
+                        </span>
+                        <span className="text-muted-foreground">{g.orderNumber}</span>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="p-4 text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 rounded-xl border border-amber-500/30">
                     <p className="font-bold text-sm">{remainingNum} expected garments were not scanned in this batch.</p>
