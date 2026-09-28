@@ -5,8 +5,9 @@
 :root {
   --radius: 1rem;
 
-  /* Soft blue-gray page canvas — separates floating white cards from the page */
-  --background: #eef1f6;
+  /* AURCLEAN is an all-white interface — cards/sidebar/header/forms/tables all
+     share this same white, separated only by subtle borders and shadows. */
+  --background: #ffffff;
   --foreground: #101828;
   --card: #ffffff;
   --card-foreground: #101828;
@@ -17,14 +18,14 @@
   --primary: #101828;
   --primary-foreground: #ffffff;
 
-  /* Soft blue-gray secondary surface */
-  --secondary: #eef1f6;
+  /* Very light neutral gray secondary surface (buttons, quiet fills) */
+  --secondary: #f4f5f7;
   --secondary-foreground: #1e293b;
 
-  --muted: #eef2f7;
+  --muted: #f6f7f9;
   --muted-foreground: #64748b;
 
-  --accent: #e7ecf4;
+  --accent: #f1f3f6;
   --accent-foreground: #101828;
 
   /* AURCLEAN forest-green brand accent — logo mark, brand highlights only */
@@ -34,8 +35,8 @@
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
-  --border: #e5e9f0;
-  --input: #e5e9f0;
+  --border: #e6e8eb;
+  --input: #e6e8eb;
   --ring: #101828;
 
   /* AURCLEAN emerald — success states double as the brand's positive accent */
@@ -52,8 +53,8 @@
   --sidebar-muted: #94a3b8;
   --sidebar-accent: #101828;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-hover: #f1f4f9;
-  --sidebar-border: #edf0f5;
+  --sidebar-hover: #f6f7f9;
+  --sidebar-border: #edeef1;
 
   --chart-1: #101828;
   --chart-2: #0f9d67;
@@ -61,7 +62,7 @@
   --chart-4: #f59e0b;
   --chart-5: #0284c7;
   --chart-6: #0a3b2c;
-  --chart-grid: #e5e9f0;
+  --chart-grid: #e6e8eb;
   --chart-surface: #ffffff;
 }
 

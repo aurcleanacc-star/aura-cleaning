@@ -124,9 +124,9 @@ export function DocumentActionBar({
             <iframe src={pdfUrl} className="h-full w-full rounded-xl border border-border shadow-inner" title="PDF Document Preview" />
           </div>
 
-          <DialogFooter className="flex flex-row items-center justify-between gap-2 border-t border-border p-2 sm:p-3">
-            <div className="truncate text-[11px] font-medium text-muted-foreground sm:text-xs">Vector A4 Print-Ready PDF</div>
-            <div className="flex gap-1.5 sm:gap-2">
+          <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-2 sm:p-3">
+            <div className="text-[11px] font-medium text-muted-foreground sm:text-xs">Vector A4 Print-Ready PDF</div>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
                 <a href={downloadUrl} download>
                   <Download className="size-3.5" /> Download

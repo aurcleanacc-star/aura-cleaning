@@ -83,23 +83,23 @@ export function BankAccountsView({ accounts, canManage }: Props) {
     <div className="space-y-6">
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <Card className="flex-1 border-blue-500/30 bg-blue-500/5">
+        <Card className="flex-1 border-info/30 bg-info/5">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <span className="text-xs uppercase font-semibold text-blue-600 dark:text-blue-400">Total Liquid Bank Balance</span>
-              <p className="text-3xl font-extrabold font-mono text-blue-600 dark:text-blue-400 mt-1">
+              <span className="text-xs uppercase font-semibold text-info">Total Liquid Bank Balance</span>
+              <p className="text-3xl font-extrabold font-mono text-info mt-1">
                 {formatCurrency(totalBankBalance)}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">{accounts.length} active business accounts connected</p>
             </div>
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-info/10 text-info">
               <Building2 className="size-6" />
             </div>
           </CardContent>
         </Card>
 
         {canManage && (
-          <Button onClick={handleOpenAdd} size="lg" className="gap-2 bg-blue-600 text-white hover:bg-blue-700 font-semibold shrink-0">
+          <Button onClick={handleOpenAdd} size="lg" className="gap-2 bg-info text-info-foreground hover:bg-info/90 font-semibold shrink-0">
             <Plus className="size-4" /> Add Bank Account
           </Button>
         )}
@@ -108,7 +108,7 @@ export function BankAccountsView({ accounts, canManage }: Props) {
       {/* Bank Accounts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts.map((acc) => (
-          <Card key={acc.id} className="border-border/60 hover:border-blue-500/40 transition">
+          <Card key={acc.id} className="border-border/60 hover:border-info/40 transition">
             <CardHeader className="flex-row items-center justify-between pb-2">
               <div>
                 <CardTitle className="text-base font-bold">{acc.bankName}</CardTitle>
@@ -119,7 +119,7 @@ export function BankAccountsView({ accounts, canManage }: Props) {
             <CardContent className="space-y-4">
               <div>
                 <span className="text-xs uppercase font-semibold text-muted-foreground">Current Available Balance</span>
-                <p className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                <p className="text-2xl font-bold font-mono text-info mt-0.5">
                   {formatCurrency(acc.currentBalance)}
                 </p>
               </div>
@@ -159,7 +159,7 @@ export function BankAccountsView({ accounts, canManage }: Props) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Building2 className="size-5 text-blue-600" /> Connect New Bank Account
+              <Building2 className="size-5 text-info" /> Connect New Bank Account
             </DialogTitle>
             <DialogDescription>
               Register business bank current accounts for automatic ledger tracking.
@@ -226,7 +226,7 @@ export function BankAccountsView({ accounts, canManage }: Props) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending} className="bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+              <Button type="submit" disabled={pending} className="bg-info text-info-foreground hover:bg-info/90 font-semibold">
                 {pending ? "Connecting..." : "Add Bank Account"}
               </Button>
             </DialogFooter>

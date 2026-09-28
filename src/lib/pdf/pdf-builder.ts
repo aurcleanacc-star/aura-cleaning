@@ -79,6 +79,15 @@ export class PDFDocumentBuilder {
   contentWidth: number;
   currentY: number;
 
+  /**
+   * The lowest y any body content is allowed to reach. Left below this and
+   * above the page's own bottom margin (pageHeight - margin) is a reserved
+   * band for the footer — PDFKit auto-inserts a blank page if `.text()` is
+   * ever asked to draw past its own margin boundary, which is exactly how
+   * every document here used to grow a spurious trailing page.
+   */
+  readonly maxContentY = 750;
+
   constructor(company: CompanyProfile) {
     this.company = company;
     this.contentWidth = this.pageWidth - this.margin * 2; // 523.28 pt
@@ -268,8 +277,6 @@ export class PDFDocumentBuilder {
    */
   renderItemsTable(columns: PDFTableColumn[], rows: PDFTableRow[]) {
     const tableTop = this.currentY;
-    const MAX_USABLE_Y = 750;
-
     // Compute column pixel widths
     const widths = columns.map((col) => (col.width / 100) * this.contentWidth);
 
@@ -301,7 +308,7 @@ export class PDFDocumentBuilder {
       const rowHeight = 20;
 
       // Page Break Check: move row to next page if it exceeds max usable height
-      if (y + rowHeight > MAX_USABLE_Y) {
+      if (y + rowHeight > this.maxContentY) {
         this.doc.addPage();
         this.currentY = this.margin;
         y = renderTableHeader(this.margin);
@@ -358,8 +365,6 @@ export class PDFDocumentBuilder {
     const boxWidth = 220;
     const startX = this.margin + this.contentWidth - boxWidth;
     let y = this.currentY;
-    const MAX_USABLE_Y = 750;
-
     // Dynamically calculate exact height of totals block
     let lineCount = 2; // Subtotal + Grand Total
     if (totals.discount && totals.discount > 0) lineCount++;
@@ -372,7 +377,7 @@ export class PDFDocumentBuilder {
 
     // Check if totals block fits on current page.
     // If table is substantial (y > 520) and totals + signatures will overflow, move totals & signatures together to next page.
-    if (y + totalsHeight > MAX_USABLE_Y || (y > 520 && y + totalsHeight + signaturesHeight > MAX_USABLE_Y)) {
+    if (y + totalsHeight > this.maxContentY || (y > 520 && y + totalsHeight + signaturesHeight > this.maxContentY)) {
       this.doc.addPage();
       y = this.margin;
     }
@@ -434,7 +439,7 @@ export class PDFDocumentBuilder {
     const startX = this.margin + this.contentWidth - boxWidth;
     let y = this.currentY;
 
-    if (y + 40 > 750) {
+    if (y + 40 > this.maxContentY) {
       this.doc.addPage();
       y = this.margin;
     }
@@ -463,10 +468,9 @@ export class PDFDocumentBuilder {
     signatures?: Array<{ title: string; name?: string }>;
   }) {
     let y = this.currentY;
-    const MAX_USABLE_Y = 750;
     const blockHeight = 95;
 
-    if (y + blockHeight > MAX_USABLE_Y) {
+    if (y + blockHeight > this.maxContentY) {
       this.doc.addPage();
       y = this.margin;
     }
@@ -544,8 +548,13 @@ export class PDFDocumentBuilder {
     for (let i = 0; i < pages.count; i++) {
       this.doc.switchToPage(i);
 
-      // Bottom Footer Bar
-      const footerY = this.pageHeight - 32;
+      // Bottom Footer Bar — kept inside the reserved band between
+      // maxContentY and the page's own bottom margin (pageHeight - margin).
+      // Drawing text past that margin boundary makes PDFKit silently insert
+      // a fresh page to keep "flowing" it, which is how this document used
+      // to grow spurious trailing pages.
+      const footerY = this.maxContentY + 10;
+      const footerLineHeight = 14;
 
       this.doc
         .moveTo(this.margin, footerY)
@@ -567,6 +576,9 @@ export class PDFDocumentBuilder {
         .font("Helvetica")
         .text(footerParts.join(" • "), this.margin, footerY + 6, {
           width: this.contentWidth - 80,
+          height: footerLineHeight,
+          ellipsis: true,
+          lineBreak: false,
         });
 
       this.doc
@@ -575,7 +587,9 @@ export class PDFDocumentBuilder {
         .font("Helvetica-Bold")
         .text(`Page ${i + 1} of ${pages.count}`, this.margin, footerY + 6, {
           width: this.contentWidth,
+          height: footerLineHeight,
           align: "right",
+          lineBreak: false,
         });
     }
 

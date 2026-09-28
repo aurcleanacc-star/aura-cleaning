@@ -199,7 +199,7 @@ export default async function DashboardPage({
                 key={action.href}
                 href={action.href}
                 title={action.label}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent lift"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-xs font-medium transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent lift"
               >
                 <action.icon className="size-3.5" aria-hidden />
                 {action.label}
