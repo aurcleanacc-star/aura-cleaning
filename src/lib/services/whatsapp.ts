@@ -541,41 +541,56 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
         body: params.messageText,
       };
 
-  const primaryEndpoint = params.documentBase64
-    ? `/api/sessions/${sessionId}/files`
-    : `/api/sessions/${sessionId}/messages`;
+  const primaryEndpoints = params.documentBase64
+    ? [
+        `/api/sessions/${sessionId}/files`,
+        `/api/${sessionId}/send-file-base64`,
+        `/api/${sessionId}/send-file`,
+        `/api/sendFile`,
+        `/api/sendFileBase64`,
+        `/api/send-file`,
+        `/api/messages/send-file`,
+        `/message/sendMedia/${sessionId}`,
+        `/send-file`,
+        `/send`,
+      ]
+    : [
+        `/api/sessions/${sessionId}/messages`,
+        `/api/${sessionId}/send-message`,
+        `/api/sendText`,
+        `/api/send-message`,
+        `/api/send`,
+        `/message/sendText/${sessionId}`,
+        `/send-text`,
+        `/send`,
+      ];
 
-  // Attempt 1: Primary session endpoint
-  let sendRes = await fetchOpenWa(primaryEndpoint, {
-    method: "POST",
-    body: payload,
-    timeoutMs: 15000,
-  });
+  let sendRes: { ok: boolean; status: number; data: any; error?: string } = {
+    ok: false,
+    status: 404,
+    data: null,
+    error: "OpenWA Gateway endpoint not found",
+  };
 
-  // Attempt 2: Standard REST endpoints
-  if (!sendRes.ok) {
-    const altEndpoint = params.documentBase64 ? "/api/sendFile" : "/api/sendText";
-    sendRes = await fetchOpenWa(altEndpoint, {
+  for (const endpoint of primaryEndpoints) {
+    const attempt = await fetchOpenWa(endpoint, {
       method: "POST",
       body: payload,
-      timeoutMs: 15000,
+      timeoutMs: 12000,
     });
+
+    if (attempt.ok || attempt.data?.success === true || attempt.data?.status === "success" || attempt.data?.id) {
+      sendRes = attempt;
+      break;
+    }
+
+    if (attempt.status !== 404) {
+      sendRes = attempt;
+    }
   }
 
-  // Attempt 3: Additional session endpoint syntax
-  if (!sendRes.ok) {
-    const altEndpoint2 = params.documentBase64
-      ? `/api/sendFileBase64`
-      : `/api/${sessionId}/send-message`;
-    sendRes = await fetchOpenWa(altEndpoint2, {
-      method: "POST",
-      body: payload,
-      timeoutMs: 15000,
-    });
-  }
-
-  if (sendRes.ok && sendRes.data) {
-    const data = sendRes.data;
+  if (sendRes.ok || sendRes.data?.success === true || sendRes.data?.status === "success" || sendRes.data?.id) {
+    const data = sendRes.data || {};
     externalId = data.id || data.messageId || data.msgId || null;
     status = "DELIVERED";
 

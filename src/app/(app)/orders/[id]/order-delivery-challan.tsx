@@ -78,7 +78,18 @@ export function OrderDeliveryChallanSection({
       if (res.success) {
         toast.success(`Delivery Challan sent to ${customerPhone} via WhatsApp!`);
       } else {
-        toast.error(res.error || "Failed to send WhatsApp");
+        const formattedPhoneDigits = (customerPhone || "").replace(/\D/g, "");
+        const cleanPhone = formattedPhoneDigits.length === 10 ? `91${formattedPhoneDigits}` : formattedPhoneDigits;
+        const fallbackUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your AURCLEAN Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you,\nAURCLEAN`)}`;
+
+        toast.error("OpenWA Gateway Endpoint Unavailable", {
+          description: "Click below to send via WhatsApp Web / App directly",
+          action: {
+            label: "Open WhatsApp Web ↗",
+            onClick: () => window.open(fallbackUrl, "_blank"),
+          },
+          duration: 10000,
+        });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "WhatsApp delivery error");
