@@ -9,6 +9,8 @@ import {
   sendWhatsAppMessage,
 } from "@/lib/services/whatsapp";
 
+export const dynamic = "force-dynamic";
+
 /**
  * WhatsApp Session Control REST API Endpoint
  */

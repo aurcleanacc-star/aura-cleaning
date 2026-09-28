@@ -1,31 +1,42 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
-const connectionString = process.env.DATABASE_URL;
+const createPrismaClient = (): PrismaClient => {
+  const connectionString =
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@127.0.0.1:5432/aura_cleaning";
 
-if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL is not set. Copy .env.example to .env and configure your PostgreSQL connection.",
-  );
-}
-
-const createPrismaClient = () =>
-  new PrismaClient({
+  return new PrismaClient({
     adapter: new PrismaPg({ connectionString }),
     log:
       process.env.NODE_ENV === "development"
         ? ["warn", "error"]
         : ["error"],
   });
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createPrismaClient> | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function getPrismaClient(): PrismaClient {
+  if (globalForPrisma.prisma) {
+    return globalForPrisma.prisma;
+  }
+  const client = createPrismaClient();
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client;
+  }
+  return client;
 }
 
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const instance = getPrismaClient();
+    const value = Reflect.get(instance, prop, receiver);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
+
 export type { Prisma } from "@/generated/prisma/client";
+

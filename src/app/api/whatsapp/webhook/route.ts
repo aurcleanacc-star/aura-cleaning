@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { handleWhatsAppWebhook } from "@/lib/services/whatsapp";
 
+export const dynamic = "force-dynamic";
+
 /** Secure Webhook Receiver for OpenWA events & status callbacks */
 export async function POST(req: Request) {
   try {

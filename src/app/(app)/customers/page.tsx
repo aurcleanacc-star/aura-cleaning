@@ -281,7 +281,7 @@ export default async function CustomersPage({
               >
                 {row.name}
               </Link>
-              <Badge variant="outline" className="font-mono text-xs">
+              <Badge tone="neutral" className="font-mono text-xs">
                 {row.code}
               </Badge>
             </div>

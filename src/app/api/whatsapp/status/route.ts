@@ -3,6 +3,8 @@ import { requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { getWhatsAppStatus } from "@/lib/services/whatsapp";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Real Connection Status API Endpoint: GET /api/whatsapp/status
  * Queries live ground-truth state directly from OpenWA and returns normalized session status.
