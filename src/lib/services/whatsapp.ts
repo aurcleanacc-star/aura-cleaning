@@ -7,9 +7,13 @@ import type { WhatsAppMessageStatus, WhatsAppMessageType } from "@/generated/pri
 
 export { formatWhatsAppPhone, interpolateWhatsAppTemplate };
 
-// Server-only OpenWA environment configuration
+// Server-only OpenWA environment configuration. No fallback secret: an
+// unconfigured OPENWA_API_KEY must fail closed (both for the outgoing
+// gateway calls below, which the real OpenWA server will then reject, and
+// for the inbound webhook in the route that imports this), never silently
+// authenticate with a guessable hardcoded string.
 const OPENWA_BASE_URL = (process.env.OPENWA_BASE_URL || process.env.OPENWA_API_URL || "http://localhost:8080").replace(/\/$/, "");
-const OPENWA_API_KEY = process.env.OPENWA_API_KEY || "aurclean_secret_key";
+export const OPENWA_API_KEY = process.env.OPENWA_API_KEY || "";
 const CONFIG_SESSION_ID = process.env.OPENWA_SESSION_ID || process.env.OPENWA_SESSION || null;
 
 /**
