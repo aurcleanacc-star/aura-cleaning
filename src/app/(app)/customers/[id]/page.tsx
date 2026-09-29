@@ -30,6 +30,7 @@ import type { OrderStatus } from "@/generated/prisma/enums";
 import { getWhatsAppHistory } from "@/lib/services/whatsapp";
 import { WhatsAppButton } from "@/components/whatsapp/whatsapp-button";
 import { DocumentActionBar } from "@/components/documents/document-action-bar";
+import { getCompanyProfile } from "@/lib/pdf/pdf-builder";
 import { DeleteCustomerButton, EditCustomerDialog } from "../customer-dialogs";
 
 export const metadata = { title: "Customer" };
@@ -41,13 +42,15 @@ export default async function CustomerProfilePage({
 }) {
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.CUSTOMER_VIEW);
+  const firmId = requireFirmId(user);
 
-  const customer = await getCustomerProfile(id, requireFirmId(user)).catch(() => null);
+  const customer = await getCustomerProfile(id, firmId).catch(() => null);
   if (!customer) notFound();
   assertBranchAccess(user, customer.branchId);
 
   const canBook = hasPermission(user, PERMISSIONS.ORDER_CREATE);
   const waHistory = await getWhatsAppHistory({ customerId: id });
+  const company = await getCompanyProfile(firmId);
 
   const columns: Column<(typeof customer.orders)[number]>[] = [
     {
@@ -375,6 +378,7 @@ export default async function CustomerProfilePage({
             customerId={customer.id}
             label="Send WhatsApp"
             initialType="CUSTOM"
+            businessName={company.name}
           />
         </CardHeader>
         <CardContent>

@@ -16,6 +16,7 @@ import {
   generateStatementPDF,
   generateExpenseReceiptPDF,
 } from "@/lib/pdf/pdf-templates";
+import { getCompanyProfile } from "@/lib/pdf/pdf-builder";
 import type { WhatsAppMessageType } from "@/generated/prisma/client";
 
 import type { DocumentType } from "@/lib/pdf/types";
@@ -41,6 +42,11 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
   status: string;
 }> {
   const { firmId, documentType, documentId, phone, sentByUserId, customCaption } = params;
+
+  // These captions are sent to the FIRM'S OWN customer, so they must carry
+  // that firm's name, never another tenant's brand.
+  const company = await getCompanyProfile(firmId);
+  const businessName = company.name || "our team";
 
   // Fail fast, before spending time generating a PDF nobody can receive yet.
   // sendWhatsAppMessage() re-checks this immediately before its own send
@@ -78,7 +84,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       customerId = invoice.customerId;
       orderId = invoice.orderId;
       messageType = "INVOICE";
-      defaultCaption = `Hello ${invoice.billToName || 'Valued Customer'},\n\nThank you for choosing AURCLEAN.\nPlease find your Tax Invoice #${invoice.invoiceNumber} attached.\n\nTotal: ₹${Number(invoice.totalAmount)}\nBalance Due: ₹${Number(invoice.amountDue)}\n\nThank you,\nAURCLEAN Laundry ERP`;
+      defaultCaption = `Hello ${invoice.billToName || 'Valued Customer'},\n\nThank you for choosing ${businessName}.\nPlease find your Tax Invoice #${invoice.invoiceNumber} attached.\n\nTotal: ₹${Number(invoice.totalAmount)}\nBalance Due: ₹${Number(invoice.amountDue)}\n\nThank you,\n${businessName}`;
       break;
     }
 
@@ -95,7 +101,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       customerId = challan.customerId;
       orderId = challan.orderId;
       messageType = "DELIVERY_CHALLAN";
-      defaultCaption = `Hello ${challan.customerName},\n\nYour AURCLEAN Delivery Challan #${challan.challanNumber} for Order #${challan.order.orderNumber} is attached.\n\nTotal Items: ${challan.items?.length || 1}\n\nThank you for choosing AURCLEAN.`;
+      defaultCaption = `Hello ${challan.customerName},\n\nYour ${businessName} Delivery Challan #${challan.challanNumber} for Order #${challan.order.orderNumber} is attached.\n\nTotal Items: ${challan.items?.length || 1}\n\nThank you for choosing ${businessName}.`;
       break;
     }
 
@@ -111,7 +117,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       customerId = payment.order?.customerId || null;
       orderId = payment.orderId;
       messageType = "PAYMENT_RECEIPT";
-      defaultCaption = `Hello ${payment.order?.customerName || 'Customer'},\n\nPayment Received successfully!\nReceipt No: #${payment.paymentNumber}\nAmount Paid: ₹${Number(payment.amount)}\nMethod: ${payment.method}\n\nThank you,\nAURCLEAN Laundry ERP`;
+      defaultCaption = `Hello ${payment.order?.customerName || 'Customer'},\n\nPayment Received successfully!\nReceipt No: #${payment.paymentNumber}\nAmount Paid: ₹${Number(payment.amount)}\nMethod: ${payment.method}\n\nThank you,\n${businessName}`;
       break;
     }
 
@@ -127,7 +133,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       customerId = delivery.order.customerId;
       orderId = delivery.orderId;
       messageType = "DELIVERY_RECEIPT";
-      defaultCaption = `Hello ${delivery.contactName},\n\nYour AURCLEAN Delivery Receipt #${delivery.deliveryNumber} is attached.\nOrder No: #${delivery.order.orderNumber}\n\nThank you for choosing AURCLEAN.`;
+      defaultCaption = `Hello ${delivery.contactName},\n\nYour ${businessName} Delivery Receipt #${delivery.deliveryNumber} is attached.\nOrder No: #${delivery.order.orderNumber}\n\nThank you for choosing ${businessName}.`;
       break;
     }
 
@@ -143,7 +149,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       customerId = order.customerId;
       orderId = order.id;
       messageType = "ORDER_CREATED";
-      defaultCaption = `Hello ${order.customerName},\n\nOrder Summary for Order #${order.orderNumber} is attached.\nTotal Amount: ₹${Number(order.totalAmount)}\nExpected Delivery: ${new Date(order.expectedDeliveryAt).toLocaleDateString()}\n\nThank you,\nAURCLEAN`;
+      defaultCaption = `Hello ${order.customerName},\n\nOrder Summary for Order #${order.orderNumber} is attached.\nTotal Amount: ₹${Number(order.totalAmount)}\nExpected Delivery: ${new Date(order.expectedDeliveryAt).toLocaleDateString()}\n\nThank you,\n${businessName}`;
       break;
     }
 
@@ -157,7 +163,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       targetPhone = targetPhone || customer.phone || "";
       customerId = customer.id;
       messageType = "CUSTOM";
-      defaultCaption = `Hello ${customer.name},\n\nPlease find your Statement of Account attached.\nTotal Orders: ${customer.orderCount}\nOutstanding Balance: ₹${Number(customer.outstandingAmount)}\n\nThank you,\nAURCLEAN Laundry ERP`;
+      defaultCaption = `Hello ${customer.name},\n\nPlease find your Statement of Account attached.\nTotal Orders: ${customer.orderCount}\nOutstanding Balance: ₹${Number(customer.outstandingAmount)}\n\nThank you,\n${businessName}`;
       break;
     }
 

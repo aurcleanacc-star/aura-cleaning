@@ -56,7 +56,7 @@ export function DocumentActionBar({
         toast.success(`PDF document ${res.fileName} sent to ${customerPhone} via WhatsApp!`);
       } else {
         setStatusStep("Gateway unavailable");
-        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone || "")}?text=${encodeURIComponent(`Hello ${customerName || 'Customer'},\n\nPlease find your ${documentType.replace(/_/g, " ")} #${documentNumber} attached.\n\nThank you,\nAURCLEAN`)}`;
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone || "")}?text=${encodeURIComponent(`Hello ${customerName || 'Customer'},\n\nPlease find your ${documentType.replace(/_/g, " ")} #${documentNumber} attached.\n\nThank you.`)}`;
 
         toast.error("OpenWA Gateway Server Unavailable", {
           description: "Click below to send via WhatsApp Web / App directly",

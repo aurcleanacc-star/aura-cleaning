@@ -24,6 +24,7 @@ export interface WhatsAppButtonProps {
   variant?: "default" | "outline" | "ghost" | "secondary";
   size?: "default" | "sm" | "icon" | "icon-sm";
   className?: string;
+  businessName: string;
 }
 
 export function WhatsAppButton({
@@ -43,6 +44,7 @@ export function WhatsAppButton({
   variant = "outline",
   size = "sm",
   className = "",
+  businessName,
 }: WhatsAppButtonProps) {
   const [composerOpen, setComposerOpen] = useState(false);
 
@@ -76,6 +78,7 @@ export function WhatsAppButton({
           initialType={initialType}
           documentName={documentName}
           documentBase64={documentBase64}
+          businessName={businessName}
         />
       )}
     </>

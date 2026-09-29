@@ -115,7 +115,7 @@ const DEFAULT_TEMPLATES: Record<WhatsAppMessageType, { name: string; body: strin
   },
   DELIVERY_CHALLAN: {
     name: "WhatsApp Delivery Challan",
-    body: "Hello {{customerName}},\n\nPlease find your AURCLEAN Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\nAURCLEAN\nThe Organic Laundry",
+    body: "Hello {{customerName}},\n\nPlease find your {{businessName}} Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\n{{businessName}}",
   },
   CUSTOM: {
     name: "Custom Message",

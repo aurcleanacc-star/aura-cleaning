@@ -36,6 +36,7 @@ export interface WhatsAppComposerProps {
   initialType?: WhatsAppMessageType;
   documentName?: string;
   documentBase64?: string;
+  businessName: string;
 }
 
 const TYPE_OPTIONS: Array<{ value: WhatsAppMessageType; label: string; icon: string }> = [
@@ -64,6 +65,7 @@ export function WhatsAppComposerDialog({
   initialType = "INVOICE",
   documentName,
   documentBase64,
+  businessName,
 }: WhatsAppComposerProps) {
   const [messageType, setMessageType] = useState<WhatsAppMessageType>(initialType);
   const [customText, setCustomText] = useState("");
@@ -105,7 +107,7 @@ export function WhatsAppComposerDialog({
     paid: paidAmount,
     balance: outstandingAmount,
     deliveryDate,
-    businessName: "AURCLEAN",
+    businessName,
     messageText: customText,
   });
 

@@ -45,6 +45,18 @@ function branchProfile(branch: {
 }
 
 /**
+ * Downloaded filenames must never carry another firm's brand name — derive
+ * the prefix from this firm's own company profile instead of a hardcoded
+ * brand string.
+ */
+function fileNamePrefix(companyName: string): string {
+  const slug = companyName
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "Document";
+}
+
+/**
  * 1. Bill of Supply (Tax Invoice) PDF Generator
  */
 export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: Buffer; fileName: string }> {
@@ -181,7 +193,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Bill-${invoice.invoiceNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Bill-${invoice.invoiceNumber}.pdf`,
   };
 }
 
@@ -276,7 +288,7 @@ export async function generateChallanPDF(challanId: string): Promise<{ buffer: B
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Delivery-Challan-${challan.challanNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Delivery-Challan-${challan.challanNumber}.pdf`,
   };
 }
 
@@ -343,7 +355,7 @@ export async function generatePaymentReceiptPDF(paymentId: string): Promise<{ bu
   builder.renderFinancialSummary({
     amountWordsLabel: "Amount In Words",
     amountWords: amountInWords(payment.amount),
-    terms: "This is an official payment receipt issued by AURCLEAN.",
+    terms: `This is an official payment receipt issued by ${company.name}.`,
     lines: summaryLines,
   });
 
@@ -354,7 +366,7 @@ export async function generatePaymentReceiptPDF(paymentId: string): Promise<{ bu
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Payment-Receipt-${payment.paymentNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Payment-Receipt-${payment.paymentNumber}.pdf`,
   };
 }
 
@@ -434,7 +446,7 @@ export async function generateDeliveryReceiptPDF(deliveryId: string): Promise<{ 
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Delivery-Receipt-${delivery.deliveryNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Delivery-Receipt-${delivery.deliveryNumber}.pdf`,
   };
 }
 
@@ -534,7 +546,7 @@ export async function generateOrderSummaryPDF(orderId: string): Promise<{ buffer
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Order-Summary-${order.orderNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Order-Summary-${order.orderNumber}.pdf`,
   };
 }
 
@@ -597,7 +609,7 @@ export async function generateStatementPDF(customerId: string): Promise<{ buffer
   builder.renderFinancialSummary({
     amountWordsLabel: "Outstanding Amount In Words",
     amountWords: amountInWords(customer.outstandingAmount),
-    terms: "Statement of Account generated from AURCLEAN ERP.",
+    terms: `Statement of Account generated from ${company.name}.`,
     lines: [
       { label: "Lifetime Spend", value: formatCurrency(customer.totalSpent) },
       { label: "Outstanding Balance", value: formatCurrency(customer.outstandingAmount), highlight: true },
@@ -609,7 +621,7 @@ export async function generateStatementPDF(customerId: string): Promise<{ buffer
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Statement-${customer.code}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Statement-${customer.code}.pdf`,
   };
 }
 
@@ -685,6 +697,6 @@ export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ bu
   const buffer = await builder.build();
   return {
     buffer,
-    fileName: `AURCLEAN-Expense-${expense.expenseNumber}.pdf`,
+    fileName: `${fileNamePrefix(company.name)}-Expense-${expense.expenseNumber}.pdf`,
   };
 }

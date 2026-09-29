@@ -79,7 +79,7 @@ export function OrderDeliveryChallanSection({
       if (res.success) {
         toast.success(`Delivery Challan sent to ${customerPhone} via WhatsApp!`);
       } else {
-        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone)}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your AURCLEAN Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you,\nAURCLEAN`)}`;
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone)}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you.`)}`;
 
         toast.error("OpenWA Gateway Endpoint Unavailable", {
           description: "Click below to send via WhatsApp Web / App directly",
