@@ -137,6 +137,16 @@ const P = PERMISSIONS;
 const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
 
 /**
+ * Cross-firm platform permissions. These live in the same PERMISSIONS map as
+ * every operational permission, so ALL_PERMISSIONS (Object.values of that
+ * map) picks them up automatically — which would otherwise silently hand
+ * every ordinary Firm Admin (SUPER_ADMIN, a per-firm role) access to the
+ * Firms module for every other firm too. Excluded from SUPER_ADMIN's grant
+ * below; only PLATFORM_ADMIN gets them.
+ */
+const PLATFORM_ONLY_PERMISSIONS: PermissionCode[] = [P.FIRM_VIEW, P.FIRM_MANAGE, P.PLATFORM_VIEW];
+
+/**
  * Manager: full operational and business access. Everything the shop needs to
  * run day to day — orders, garments, customers, payments, inventory, staff,
  * reports, scanning and printing — but never RBAC or system settings.
@@ -263,8 +273,8 @@ const SCANNER_PERMISSIONS: PermissionCode[] = [
  * permission bit being set is harmless on its own.
  */
 export const ROLE_PERMISSIONS: Record<UserRole, PermissionCode[]> = {
-  PLATFORM_ADMIN: [...new Set([...ALL_PERMISSIONS, P.FIRM_VIEW, P.FIRM_MANAGE, P.PLATFORM_VIEW])],
-  SUPER_ADMIN: ALL_PERMISSIONS,
+  PLATFORM_ADMIN: [...new Set([...ALL_PERMISSIONS, ...PLATFORM_ONLY_PERMISSIONS])],
+  SUPER_ADMIN: ALL_PERMISSIONS.filter((code) => !PLATFORM_ONLY_PERMISSIONS.includes(code)),
   MANAGER: [...new Set(MANAGER_PERMISSIONS)],
   SCANNER: [...new Set(SCANNER_PERMISSIONS)],
 };
