@@ -51,27 +51,40 @@ export interface BranchProfile {
  * onto another firm's document.
  */
 export async function getCompanyProfile(firmId: string): Promise<CompanyProfile> {
-  const settings = await prisma.setting.findMany({
-    where: {
-      firmId,
-      category: { in: ["company", "documents", "general"] },
-    },
-  });
+  const [settings, firm] = await Promise.all([
+    prisma.setting.findMany({
+      where: {
+        firmId,
+        category: { in: ["company", "documents", "general"] },
+      },
+    }),
+    // Falls back to the firm's own registration details — never to another
+    // firm's brand name — when this firm hasn't configured its document
+    // settings yet (e.g. a just-created firm that hasn't visited
+    // Settings > Documents).
+    prisma.firm.findUnique({
+      where: { id: firmId },
+      select: { name: true, addressLine: true, city: true, state: true, pincode: true, phone: true, email: true, website: true, gstin: true, logoUrl: true },
+    }),
+  ]);
 
   const map = new Map(settings.map((s) => [s.key, s.value]));
+  const firmAddress = firm
+    ? [firm.addressLine, firm.city, firm.state, firm.pincode].filter(Boolean).join(", ")
+    : "";
 
   return {
-    name: map.get("company_name") || map.get("app_name") || "Aurclean - The Organic Laundry",
+    name: map.get("company_name") || map.get("app_name") || firm?.name || "",
     // No fabricated address/phone/GSTIN here: an unconfigured field is left
     // blank (and the footer omits it) rather than printing a placeholder
     // that reads as a real registered business number on every document.
-    address: map.get("company_address") || "",
-    phone: map.get("company_phone") || "",
-    email: map.get("company_email") || "aurclean.info@gmail.com",
-    website: map.get("company_website") || "",
-    gstin: map.get("company_gstin") || "",
-    logoUrl: map.get("company_logo") || "/logo.png",
-    footerText: map.get("document_footer_text") || "Thank you for choosing AURCLEAN. Dedicated to laundry excellence.",
+    address: map.get("company_address") || firmAddress || "",
+    phone: map.get("company_phone") || firm?.phone || "",
+    email: map.get("company_email") || firm?.email || "",
+    website: map.get("company_website") || firm?.website || "",
+    gstin: map.get("company_gstin") || firm?.gstin || "",
+    logoUrl: map.get("company_logo") || firm?.logoUrl || "/logo.png",
+    footerText: map.get("document_footer_text") || "Thank you for choosing us. Dedicated to laundry excellence.",
     termsConditions:
       map.get("document_terms") ||
       "1. No guarantee against colour loss, bleeding & shrinkage.\n2. In case of rare damage, the company's liability shall be limited to a maximum of eight (8) times the processing (laundry/dry clean) cost.",
