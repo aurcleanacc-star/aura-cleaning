@@ -4,27 +4,43 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
+import { formatCurrency, amountInWords as amountInWordsHelper } from "@/lib/money";
+import { formatDate, formatTime } from "@/lib/dates";
 
-// Palette matching AURCLEAN ERP visual identity
+// Traditional, print-safe business-document palette — pure white page, black
+// body text, AURCLEAN forest green for the accents (table headers, the
+// document title, the separator rule, and the highlighted total row). No
+// grays, cards, or shadows: this is meant to look like a printed accounting
+// document, not a web dashboard panel.
 export const COLORS = {
-  primary: "#064e3b", // Forest Green
-  primaryDark: "#022c22",
-  emerald: "#059669", // Emerald Accent
-  emeraldLight: "#dcfce7",
-  charcoal: "#0f172a", // Text Main
-  slate: "#475569", // Text Muted
-  lightBg: "#f8fafc",
-  border: "#cbd5e1",
+  primary: "#0a3b2c", // AURCLEAN forest green — matches the app's own --brand token
+  primaryDark: "#062418",
+  ink: "#000000",
+  muted: "#3f3f3f",
+  border: "#9aa39c",
   white: "#ffffff",
-  statusPaid: "#059669",
-  statusUnpaid: "#dc2626",
-  statusPartial: "#d97706",
 };
+
+// PDFKit's 14 built-in base fonts (Helvetica, etc.) use WinAnsiEncoding,
+// which has no glyph for the Rupee sign (U+20B9, standardized in 2010) —
+// every ₹ in a document rendered with them prints as a broken superscript
+// "¹". DejaVu Sans does have the glyph and is bundled below so this holds
+// regardless of what fonts happen to be installed on the host OS.
+const FONT_REGULAR = "DejaVuSans";
+const FONT_BOLD = "DejaVuSans-Bold";
 
 import type { CompanyProfile } from "./types";
 export type { CompanyProfile };
+
+export interface BranchProfile {
+  name: string;
+  addressLine?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}
 
 export async function getCompanyProfile(): Promise<CompanyProfile> {
   const settings = await prisma.setting.findMany({
@@ -36,20 +52,20 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
   const map = new Map(settings.map((s) => [s.key, s.value]));
 
   return {
-    name: map.get("company_name") || map.get("app_name") || "AURCLEAN Laundry Management",
+    name: map.get("company_name") || map.get("app_name") || "Aurclean - The Organic Laundry",
     // No fabricated address/phone/GSTIN here: an unconfigured field is left
     // blank (and the footer omits it) rather than printing a placeholder
     // that reads as a real registered business number on every document.
     address: map.get("company_address") || "",
     phone: map.get("company_phone") || "",
-    email: map.get("company_email") || "",
+    email: map.get("company_email") || "aurclean.info@gmail.com",
     website: map.get("company_website") || "",
     gstin: map.get("company_gstin") || "",
     logoUrl: map.get("company_logo") || "/logo.png",
     footerText: map.get("document_footer_text") || "Thank you for choosing AURCLEAN. Dedicated to laundry excellence.",
     termsConditions:
       map.get("document_terms") ||
-      "1. Goods once delivered in good condition cannot be returned.\n2. Any claims regarding missing/damaged items must be reported within 24 hours.\n3. All disputes are subject to local jurisdiction.",
+      "1. No guarantee against colour loss, bleeding & shrinkage.\n2. In case of rare damage, the company's liability shall be limited to a maximum of eight (8) times the processing (laundry/dry clean) cost.",
     invoicePrefix: map.get("invoice_prefix") || "INV",
     challanPrefix: map.get("challan_prefix") || "DC",
     receiptPrefix: map.get("receipt_prefix") || "REC",
@@ -59,7 +75,7 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
 export interface PDFTableColumn {
   id: string;
   header: string;
-  width: number; // percentage or fixed pt
+  width: number; // percentage of content width
   align?: "left" | "center" | "right";
 }
 
@@ -67,30 +83,56 @@ export interface PDFTableRow {
   [key: string]: string | number;
 }
 
+export interface InfoColumn {
+  heading: string;
+  lines: string[];
+}
+
+export interface SummaryLine {
+  label: string;
+  value: string;
+  bold?: boolean;
+  highlight?: boolean; // green background, white text — the document's headline figure
+}
+
 /**
- * PDFDocumentBuilder encapsulates PDFKit creation and reusable component rendering.
+ * Shared PDFKit document-assembly system for every AURCLEAN business
+ * document (Bill of Supply, Delivery Challan, Payment Receipt, Delivery
+ * Receipt). One component per visual block (header, title, info columns,
+ * items table, financial summary, signature) so the four templates configure
+ * the same building blocks instead of four unrelated implementations.
  */
 export class PDFDocumentBuilder {
   doc: InstanceType<typeof PDFDocument>;
   company: CompanyProfile;
-  pageWidth = 595.28; // A4 pt
-  pageHeight = 841.89;
-  margin = 36;
+  pageWidth = 595.28; // A4 pt (210mm)
+  pageHeight = 841.89; // A4 pt (297mm)
+  margin = 32;
   contentWidth: number;
   currentY: number;
 
   /**
-   * The lowest y any body content is allowed to reach. Left below this and
-   * above the page's own bottom margin (pageHeight - margin) is a reserved
-   * band for the footer — PDFKit auto-inserts a blank page if `.text()` is
-   * ever asked to draw past its own margin boundary, which is exactly how
-   * every document here used to grow a spurious trailing page.
+   * The lowest y body content may reach before a new page is started. Kept
+   * a few points above the document's own bottom margin (pageHeight -
+   * margin) on purpose: that exact boundary is also where PDFKit's own
+   * internal overflow check lives, and it triggers on the real rendered
+   * height of a text call, not on this class's own (necessarily
+   * approximate) heightOfString estimates. Landing a block flush against
+   * that line — where a sub-point rounding difference between the two is
+   * enough to tip it over — is what silently added a blank trailing page
+   * with only a footer on it here before; the margin below keeps every
+   * block's real footprint clear of that boundary.
    */
-  readonly maxContentY = 750;
+  readonly maxY: number;
+  private static readonly BOTTOM_SAFETY = 20;
+
+  /** Re-invoked on every page after the first, to repeat the table header. */
+  private onNewPage: (() => void) | null = null;
 
   constructor(company: CompanyProfile) {
     this.company = company;
-    this.contentWidth = this.pageWidth - this.margin * 2; // 523.28 pt
+    this.contentWidth = this.pageWidth - this.margin * 2;
+    this.maxY = this.pageHeight - this.margin - PDFDocumentBuilder.BOTTOM_SAFETY;
     this.doc = new PDFDocument({
       size: "A4",
       margin: this.margin,
@@ -102,495 +144,469 @@ export class PDFDocumentBuilder {
       },
     });
     this.currentY = this.margin;
+
+    this.doc.registerFont(FONT_REGULAR, path.join(process.cwd(), "public", "fonts", "DejaVuSans.ttf"));
+    this.doc.registerFont(FONT_BOLD, path.join(process.cwd(), "public", "fonts", "DejaVuSans-Bold.ttf"));
+    this.doc.font(FONT_REGULAR);
   }
 
-  /**
-   * Renders standardized AURCLEAN Document Header
-   */
-  renderHeader(title: string, documentNumber: string, dateStr?: string) {
-    const startY = this.margin;
-
-    // Draw Top Decorative Primary Bar
+  private text(
+    value: string,
+    x: number,
+    y: number,
+    opts: PDFKit.Mixins.TextOptions & { bold?: boolean; size?: number; color?: string } = {},
+  ) {
+    const { bold, size, color, ...rest } = opts;
     this.doc
-      .rect(this.margin, startY, this.contentWidth, 4)
-      .fill(COLORS.primary);
+      .font(bold ? FONT_BOLD : FONT_REGULAR)
+      .fontSize(size ?? 9)
+      .fillColor(color ?? COLORS.ink)
+      .text(value, x, y, rest);
+  }
 
-    this.currentY = startY + 12;
-
-    // Try embedding official logo image if exists
-    let logoDrawn = false;
-    const projectLogoPath = path.join(process.cwd(), "public", "logo.png");
-    if (fs.existsSync(projectLogoPath)) {
-      try {
-        this.doc.image(projectLogoPath, this.margin, this.currentY, { width: 36 });
-        logoDrawn = true;
-      } catch {}
-    }
-
-    const textX = logoDrawn ? this.margin + 44 : this.margin;
-
-    // Left Side: Brand Name & Tagline
+  private hr(y: number, color: string = COLORS.border, width = 0.75) {
     this.doc
-      .fillColor(COLORS.primary)
-      .fontSize(18)
-      .font("Helvetica-Bold")
-      .text(this.company.name.toUpperCase(), textX, this.currentY);
-
-    this.doc
-      .fillColor(COLORS.emerald)
-      .fontSize(9)
-      .font("Helvetica-Bold")
-      .text("LAUNDRY MANAGEMENT ERP", textX, this.currentY + 20);
-
-    // Right Side: Document Title & Document Number
-    const rightMargin = this.pageWidth - this.margin;
-    this.doc
-      .fillColor(COLORS.primary)
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text(title.toUpperCase(), this.margin, this.currentY, {
-        width: this.contentWidth,
-        align: "right",
-      });
-
-    this.doc
-      .fillColor(COLORS.charcoal)
-      .fontSize(11)
-      .font("Helvetica-Bold")
-      .text(documentNumber, this.margin, this.currentY + 18, {
-        width: this.contentWidth,
-        align: "right",
-      });
-
-    if (dateStr) {
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(9)
-        .font("Helvetica")
-        .text(`Date: ${dateStr}`, this.margin, this.currentY + 32, {
-          width: this.contentWidth,
-          align: "right",
-        });
-    }
-
-    this.currentY += 46;
-
-    // Divider
-    this.doc
-      .moveTo(this.margin, this.currentY)
-      .lineTo(rightMargin, this.currentY)
-      .strokeColor(COLORS.border)
-      .lineWidth(0.75)
+      .moveTo(this.margin, y)
+      .lineTo(this.pageWidth - this.margin, y)
+      .strokeColor(color)
+      .lineWidth(width)
       .stroke();
-
-    this.currentY += 12;
   }
 
   /**
-   * Renders 2-column info grid (Company Info & Customer / Target Info)
+   * Starts a new page if `height` of content would cross maxY. Returns
+   * whether a page break happened, since callers with their own running `y`
+   * (rather than `this.currentY`) need to reset it themselves.
    */
-  renderInfoGrid(params: {
-    customerTitle?: string;
-    customerName: string;
-    customerPhone?: string;
-    customerAddress?: string;
-    customerEmail?: string;
-    metaItems: Array<{ label: string; value: string }>;
-  }) {
+  private ensureSpace(height: number, y?: number): boolean {
+    const at = y ?? this.currentY;
+    if (at + height <= this.maxY) return false;
+    this.doc.addPage();
+    this.currentY = this.margin;
+    if (this.onNewPage) this.onNewPage();
+    return true;
+  }
+
+  /**
+   * Company details top-left, logo top-right (aspect ratio always
+   * preserved — PDFKit's `fit` option scales without stretching), a
+   * centered document title, then a thin green rule.
+   */
+  renderCompanyHeader(branch: BranchProfile) {
     const startY = this.currentY;
-    const colWidth = (this.contentWidth - 16) / 2;
+    const rightColWidth = 90;
+    const leftColWidth = this.contentWidth - rightColWidth - 12;
 
-    // Left Column: Company & Customer Info Box
-    this.doc
-      .roundedRect(this.margin, startY, colWidth, 90, 4)
-      .fillAndStroke(COLORS.lightBg, COLORS.border);
-
-    this.doc
-      .fillColor(COLORS.slate)
-      .fontSize(8)
-      .font("Helvetica-Bold")
-      .text((params.customerTitle || "CUSTOMER / BILL TO").toUpperCase(), this.margin + 10, startY + 8);
-
-    this.doc
-      .fillColor(COLORS.charcoal)
-      .fontSize(11)
-      .font("Helvetica-Bold")
-      .text(params.customerName, this.margin + 10, startY + 20, { width: colWidth - 20 });
-
-    if (params.customerPhone) {
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(9)
-        .font("Helvetica")
-        .text(`Phone: ${params.customerPhone}`, this.margin + 10, startY + 36);
-    }
-
-    if (params.customerAddress) {
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(8.5)
-        .font("Helvetica")
-        .text(params.customerAddress, this.margin + 10, startY + 48, {
-          width: colWidth - 20,
-          height: 32,
-          ellipsis: true,
-        });
-    }
-
-    // Right Column: Document Metadata Box
-    const rightX = this.margin + colWidth + 16;
-    this.doc
-      .roundedRect(rightX, startY, colWidth, 90, 4)
-      .fillAndStroke(COLORS.lightBg, COLORS.border);
-
-    this.doc
-      .fillColor(COLORS.slate)
-      .fontSize(8)
-      .font("Helvetica-Bold")
-      .text("DOCUMENT DETAILS", rightX + 10, startY + 8);
-
-    let metaY = startY + 22;
-    params.metaItems.forEach((item) => {
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(9)
-        .font("Helvetica")
-        .text(`${item.label}:`, rightX + 10, metaY);
-
-      this.doc
-        .fillColor(COLORS.charcoal)
-        .fontSize(9)
-        .font("Helvetica-Bold")
-        .text(item.value, rightX + 10, metaY, {
-          width: colWidth - 20,
-          align: "right",
-        });
-
-      metaY += 15;
+    this.text(`${this.company.name} - ${branch.name}`, this.margin, startY, {
+      bold: true,
+      size: 12.5,
+      width: leftColWidth,
     });
 
-    this.currentY = startY + 102;
+    let y = startY + 16;
+    const addressParts = [branch.addressLine, branch.city, branch.state, branch.pincode].filter(Boolean);
+    if (addressParts.length > 0) {
+      this.text(addressParts.join(", "), this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+      y += 12;
+    }
+
+    const phone = branch.phone || this.company.phone;
+    if (phone) {
+      this.text(`Phone no.: ${phone}`, this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+      y += 12;
+    }
+
+    const email = branch.email || this.company.email;
+    if (email) {
+      this.text(`Email: ${email}`, this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+      y += 12;
+    }
+
+    // Logo, top-right, aspect-ratio preserved and never stretched.
+    const logoBox = { w: rightColWidth, h: 52 };
+    const logoX = this.pageWidth - this.margin - logoBox.w;
+    // A print-resolution copy (300x300 — ~400dpi at this box's printed
+    // size), not the source public/logo.png (1254x1254): PDFKit embeds
+    // images verbatim with no downscaling, so using the full source made
+    // every generated document balloon to over a megabyte for no visible
+    // sharpness gain.
+    let logoPath = path.join(process.cwd(), "public", "logo-pdf.png");
+    if (!fs.existsSync(logoPath)) {
+      logoPath = path.join(process.cwd(), "public", "logo.png");
+    }
+    if (fs.existsSync(logoPath)) {
+      try {
+        this.doc.image(logoPath, logoX, startY, { fit: [logoBox.w, logoBox.h], align: "right" });
+      } catch {
+        // Malformed/unreadable logo file — the rest of the document still
+        // renders correctly without it.
+      }
+    }
+
+    this.currentY = Math.max(y, startY + logoBox.h) + 8;
+    this.hr(this.currentY, COLORS.primary, 1.5);
+    this.currentY += 16;
+  }
+
+  /** Large centered bold green document title, e.g. "BILL OF SUPPLY". */
+  renderDocumentTitle(title: string) {
+    this.text(title.toUpperCase(), this.margin, this.currentY, {
+      bold: true,
+      size: 17,
+      color: COLORS.primary,
+      width: this.contentWidth,
+      align: "center",
+      characterSpacing: 0.5,
+    });
+    this.currentY += 26;
   }
 
   /**
-   * Renders clean vector Items Table with automatic multi-page headers
+   * N evenly-spaced compact info columns (e.g. Bill To / Transportation
+   * Details / Invoice Details, or the Delivery Challan's four columns).
    */
-  renderItemsTable(columns: PDFTableColumn[], rows: PDFTableRow[]) {
-    const tableTop = this.currentY;
-    // Compute column pixel widths
-    const widths = columns.map((col) => (col.width / 100) * this.contentWidth);
+  renderInfoColumns(columns: InfoColumn[]) {
+    const gap = 10;
+    const colWidth = (this.contentWidth - gap * (columns.length - 1)) / columns.length;
+    const startY = this.currentY;
 
-    const renderTableHeader = (y: number) => {
-      // Table Header Background Bar
+    // The heading itself can wrap to two lines in a narrow column (e.g. a
+    // four-column challan header) — its own height must be included before
+    // the first content line starts, or the two visually overlap. Line 0 of
+    // the content is rendered bold (it's the customer/branch name), and
+    // bold glyphs are wider than regular ones — measuring it with the
+    // regular font under-counts how many lines it actually wraps to, which
+    // is exactly what caused the next line to overlap it. Always measure
+    // with the same font the line is rendered in.
+    const lineHeight = (line: string, bold: boolean) =>
       this.doc
-        .rect(this.margin, y, this.contentWidth, 20)
-        .fill(COLORS.primary);
+        .font(bold ? FONT_BOLD : FONT_REGULAR)
+        .fontSize(8.5)
+        .heightOfString(line, { width: colWidth });
 
-      let currentX = this.margin;
+    const headingHeight = (heading: string) => lineHeight(heading.toUpperCase(), true) + 5;
+
+    const blockHeights = columns.map((col) => {
+      const linesHeight = col.lines.reduce(
+        (sum, line, idx) => sum + lineHeight(line, idx === 0) + 3,
+        0,
+      );
+      return headingHeight(col.heading) + linesHeight;
+    });
+    const blockHeight = Math.max(...blockHeights, 30);
+    const broke = this.ensureSpace(blockHeight, startY);
+    const y0 = broke ? this.currentY : startY;
+
+    columns.forEach((col, idx) => {
+      const x = this.margin + idx * (colWidth + gap);
+      this.text(col.heading.toUpperCase(), x, y0, { bold: true, size: 8.5, width: colWidth });
+      let ly = y0 + headingHeight(col.heading);
+      col.lines.forEach((line, lineIdx) => {
+        const bold = lineIdx === 0;
+        this.text(line, x, ly, { size: 8.5, bold, width: colWidth });
+        ly += lineHeight(line, bold) + 3;
+      });
+    });
+
+    this.currentY = y0 + blockHeight;
+
+    const dividerY = this.currentY + 4;
+    this.hr(dividerY, COLORS.border, 0.5);
+    this.currentY = dividerY + 12;
+  }
+
+  /**
+   * Full-width items table: solid green header with white bold text, plain
+   * white rows with a hairline rule under each, and an optional TOTAL row
+   * using the same column grid so figures line up exactly. Repeats the
+   * header automatically on any page the table spills onto.
+   */
+  renderItemsTable(columns: PDFTableColumn[], rows: PDFTableRow[], totalRow?: PDFTableRow) {
+    const widths = columns.map((col) => (col.width / 100) * this.contentWidth);
+    const headerHeight = 20;
+
+    const renderHeaderRow = (y: number) => {
+      this.doc.rect(this.margin, y, this.contentWidth, headerHeight).fill(COLORS.primary);
+      let x = this.margin;
+      columns.forEach((col, idx) => {
+        this.text(col.header.toUpperCase(), x + 6, y + 6, {
+          bold: true,
+          size: 8.5,
+          color: COLORS.white,
+          width: widths[idx] - 12,
+          align: col.align || "left",
+        });
+        x += widths[idx];
+      });
+    };
+
+    this.onNewPage = () => {
+      renderHeaderRow(this.margin);
+      this.currentY = this.margin + headerHeight;
+    };
+
+    // ensureSpace's onNewPage callback already draws the header row and
+    // advances currentY when it breaks the page here — only draw it
+    // ourselves when no break happened, or the header would render twice.
+    const brokeAtStart = this.ensureSpace(headerHeight, this.currentY);
+    if (!brokeAtStart) {
+      renderHeaderRow(this.currentY);
+      this.currentY += headerHeight;
+    }
+    let y = this.currentY;
+
+    const rowHeight = (row: PDFTableRow, bold = false) => {
+      const itemColIdx = columns.findIndex((c) => c.id === "item" || c.id === "garmentCode" || c.id === "name");
+      const col = itemColIdx >= 0 ? columns[itemColIdx] : columns[0];
+      const w = itemColIdx >= 0 ? widths[itemColIdx] : widths[0];
+      const val = row[col.id] !== undefined ? String(row[col.id]) : "";
+      const textHeight = this.doc
+        .font(bold ? FONT_BOLD : FONT_REGULAR)
+        .fontSize(8.5)
+        .heightOfString(val, { width: w - 12 });
+      return Math.max(20, textHeight + 9);
+    };
+
+    rows.forEach((row) => {
+      const rh = rowHeight(row);
+      if (this.ensureSpace(rh, y)) {
+        y = this.currentY;
+      }
+
+      let x = this.margin;
       columns.forEach((col, idx) => {
         const w = widths[idx];
-        this.doc
-          .fillColor(COLORS.white)
-          .fontSize(9)
-          .font("Helvetica-Bold")
-          .text(col.header, currentX + 6, y + 5, {
-            width: w - 12,
-            align: col.align || "left",
-          });
-        currentX += w;
-      });
-      return y + 20;
-    };
-
-    let y = renderTableHeader(tableTop);
-
-    rows.forEach((row, rowIdx) => {
-      const rowHeight = 20;
-
-      // Page Break Check: move row to next page if it exceeds max usable height
-      if (y + rowHeight > this.maxContentY) {
-        this.doc.addPage();
-        this.currentY = this.margin;
-        y = renderTableHeader(this.margin);
-      }
-
-      const bg = rowIdx % 2 === 0 ? COLORS.white : COLORS.lightBg;
-
-      this.doc.rect(this.margin, y, this.contentWidth, rowHeight).fill(bg);
-
-      let currentX = this.margin;
-      columns.forEach((col, colIdx) => {
-        const w = widths[colIdx];
         const val = row[col.id] !== undefined ? String(row[col.id]) : "";
-
-        this.doc
-          .fillColor(COLORS.charcoal)
-          .fontSize(8.5)
-          .font(colIdx === 1 ? "Helvetica-Bold" : "Helvetica")
-          .text(val, currentX + 6, y + 5, {
-            width: w - 12,
-            align: col.align || "left",
-            ellipsis: true,
-          });
-
-        currentX += w;
+        const isItemCol = idx === 1;
+        this.text(val, x + 6, y + 6, {
+          bold: isItemCol,
+          size: 8.5,
+          width: w - 12,
+          align: col.align || "left",
+          // The item column sized this row and is allowed its full
+          // height; every other column is capped and ellipsized so an
+          // unexpectedly long value can never bleed into the row below.
+          ...(isItemCol ? {} : { height: rh - 9, ellipsis: true }),
+        });
+        x += w;
       });
 
-      // Bottom Row Border Line
       this.doc
-        .moveTo(this.margin, y + rowHeight)
-        .lineTo(this.margin + this.contentWidth, y + rowHeight)
+        .moveTo(this.margin, y + rh)
+        .lineTo(this.margin + this.contentWidth, y + rh)
         .strokeColor(COLORS.border)
-        .lineWidth(0.5)
+        .lineWidth(0.4)
         .stroke();
 
-      y += rowHeight;
+      y += rh;
     });
 
-    this.currentY = y + 12;
+    if (totalRow) {
+      const rh = rowHeight(totalRow, true) + 4;
+      if (this.ensureSpace(rh + 6, y)) {
+        y = this.currentY;
+      }
+      this.hr(y, COLORS.primary, 1);
+      y += 6;
+
+      let x = this.margin;
+      columns.forEach((col, idx) => {
+        const w = widths[idx];
+        const val = totalRow[col.id] !== undefined ? String(totalRow[col.id]) : "";
+        this.text(val, x + 6, y, {
+          bold: true,
+          size: 9,
+          width: w - 12,
+          align: col.align || "left",
+        });
+        x += w;
+      });
+      y += 16;
+      this.hr(y, COLORS.primary, 1);
+      y += 6;
+    }
+
+    this.onNewPage = null;
+    this.currentY = y + 14;
   }
 
   /**
-   * Renders Right-Aligned Totals Block (Subtotal, Tax, Discount, Total, Paid, Balance)
+   * Financial documents (Bill of Supply, Payment Receipt): amount-in-words
+   * and terms on the left, a right-aligned key/value stack ending in a
+   * green-highlighted headline total on the right.
    */
-  renderTotalsBlock(totals: {
-    subtotal: number;
-    discount?: number;
-    gstRate?: number;
-    gstAmount?: number;
-    grandTotal: number;
-    paidAmount?: number;
-    balanceAmount?: number;
+  renderFinancialSummary(params: {
+    amountWordsLabel: string;
+    amountWords: string;
+    terms?: string;
+    lines: SummaryLine[];
   }) {
-    const boxWidth = 220;
-    const startX = this.margin + this.contentWidth - boxWidth;
-    let y = this.currentY;
-    // Dynamically calculate exact height of totals block
-    let lineCount = 2; // Subtotal + Grand Total
-    if (totals.discount && totals.discount > 0) lineCount++;
-    if (totals.gstAmount && totals.gstAmount > 0) lineCount++;
-    if (totals.paidAmount !== undefined) lineCount++;
-    if (totals.balanceAmount !== undefined) lineCount++;
+    const leftWidth = this.contentWidth * 0.56;
+    const rightWidth = this.contentWidth - leftWidth - 16;
+    const rightX = this.margin + leftWidth + 16;
 
-    const totalsHeight = lineCount * 16 + 10 + 16;
-    const signaturesHeight = 95;
+    const lineRowHeight = (line: SummaryLine) => (line.highlight ? 24 : 15);
+    const rightHeight = params.lines.reduce((sum, l) => sum + lineRowHeight(l), 0) + 4;
 
-    // Check if totals block fits on current page.
-    // If table is substantial (y > 520) and totals + signatures will overflow, move totals & signatures together to next page.
-    if (y + totalsHeight > this.maxContentY || (y > 520 && y + totalsHeight + signaturesHeight > this.maxContentY)) {
-      this.doc.addPage();
-      y = this.margin;
+    // A large total spelled out ("Ten Thousand Nine Hundred Eighteen
+    // Rupees...") can wrap to two lines — measure it so "Terms and
+    // Conditions" starts below it instead of on top of it.
+    const amountWordsHeight = this.doc.font(FONT_REGULAR).fontSize(9).heightOfString(params.amountWords, { width: leftWidth });
+    const termsHeight = params.terms
+      ? this.doc.font(FONT_REGULAR).fontSize(7.5).heightOfString(params.terms, { width: leftWidth }) + 24
+      : 0;
+    const leftHeight = 12 + amountWordsHeight + 8 + termsHeight;
+
+    const blockHeight = Math.max(leftHeight, rightHeight);
+    this.ensureSpace(blockHeight);
+    const startY = this.currentY;
+
+    // Left: Amount in Words + Terms & Conditions
+    this.text(params.amountWordsLabel, this.margin, startY, { bold: true, size: 8.5 });
+    this.text(params.amountWords, this.margin, startY + 12, { size: 9, width: leftWidth });
+
+    if (params.terms) {
+      const termsStartY = startY + 12 + amountWordsHeight + 8;
+      this.text("Terms and Conditions", this.margin, termsStartY, { bold: true, size: 8.5 });
+      this.text(params.terms, this.margin, termsStartY + 12, { size: 7.5, color: COLORS.muted, width: leftWidth });
     }
 
-    const renderLine = (label: string, value: string, isBold = false, isHighlight = false, color = COLORS.charcoal) => {
-      if (isHighlight) {
-        this.doc.rect(startX, y, boxWidth, 22).fill(COLORS.emeraldLight);
-      }
-
-      this.doc
-        .fillColor(color)
-        .fontSize(isBold ? 10 : 9)
-        .font(isBold ? "Helvetica-Bold" : "Helvetica")
-        .text(label, startX + 8, y + (isHighlight ? 5 : 2));
-
-      this.doc
-        .fillColor(color)
-        .fontSize(isBold ? 10 : 9)
-        .font(isBold ? "Helvetica-Bold" : "Helvetica")
-        .text(value, startX + 8, y + (isHighlight ? 5 : 2), {
-          width: boxWidth - 16,
+    // Right: key/value stack with a highlighted total row
+    let ry = startY;
+    params.lines.forEach((line) => {
+      const h = lineRowHeight(line);
+      if (line.highlight) {
+        this.doc.rect(rightX, ry, rightWidth, h).fill(COLORS.primary);
+        this.text(line.label.toUpperCase(), rightX + 8, ry + 6, { bold: true, size: 10, color: COLORS.white });
+        this.text(line.value, rightX + 8, ry + 6, {
+          bold: true,
+          size: 10,
+          color: COLORS.white,
+          width: rightWidth - 16,
           align: "right",
         });
-
-      y += isHighlight ? 26 : 16;
-    };
-
-    renderLine("Subtotal:", formatCurrency(totals.subtotal));
-
-    if (totals.discount && totals.discount > 0) {
-      renderLine("Discount:", `-${formatCurrency(totals.discount)}`, false, false, COLORS.emerald);
-    }
-
-    if (totals.gstAmount && totals.gstAmount > 0) {
-      renderLine(`GST (${totals.gstRate || 18}%):`, formatCurrency(totals.gstAmount));
-    }
-
-    renderLine("Grand Total:", formatCurrency(totals.grandTotal), true, true, COLORS.primary);
-
-    if (totals.paidAmount !== undefined) {
-      renderLine("Paid Amount:", formatCurrency(totals.paidAmount), false, false, COLORS.emerald);
-    }
-
-    if (totals.balanceAmount !== undefined) {
-      const balanceColor = totals.balanceAmount > 0 ? "#9a3412" : COLORS.emerald;
-      renderLine("Balance Due:", formatCurrency(totals.balanceAmount), true, false, balanceColor);
-    }
-
-    this.currentY = y + 16;
-  }
-
-  /**
-   * A single highlighted total line with no financial breakdown — for
-   * documents like the Delivery Challan that record garments moving, not
-   * money, and must never show subtotal/tax/paid/balance.
-   */
-  renderSimpleTotal(label: string, value: string | number) {
-    const boxWidth = 220;
-    const startX = this.margin + this.contentWidth - boxWidth;
-    let y = this.currentY;
-
-    if (y + 40 > this.maxContentY) {
-      this.doc.addPage();
-      y = this.margin;
-    }
-
-    this.doc.rect(startX, y, boxWidth, 26).fill(COLORS.emeraldLight);
-    this.doc
-      .fillColor(COLORS.primary)
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text(label.toUpperCase(), startX + 8, y + 8);
-    this.doc
-      .fillColor(COLORS.primary)
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text(String(value), startX + 8, y + 8, { width: boxWidth - 16, align: "right" });
-
-    this.currentY = y + 26 + 16;
-  }
-
-  /**
-   * Renders Terms, Remarks, and Signature Boxes
-   */
-  renderTermsAndSignatures(params: {
-    terms?: string;
-    remarks?: string;
-    signatures?: Array<{ title: string; name?: string }>;
-  }) {
-    let y = this.currentY;
-    const blockHeight = 95;
-
-    if (y + blockHeight > this.maxContentY) {
-      this.doc.addPage();
-      y = this.margin;
-    }
-
-    // Terms Box Left
-    if (params.terms || params.remarks) {
-      this.doc
-        .roundedRect(this.margin, y, 280, 85, 4)
-        .fillAndStroke(COLORS.lightBg, COLORS.border);
-
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(8)
-        .font("Helvetica-Bold")
-        .text("TERMS & REMARKS", this.margin + 8, y + 6);
-
-      const bodyText = params.terms || params.remarks || "";
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(7.5)
-        .font("Helvetica")
-        .text(bodyText, this.margin + 8, y + 18, {
-          width: 264,
-          height: 60,
-          ellipsis: true,
+      } else {
+        this.text(line.label, rightX + 8, ry + 2, { bold: Boolean(line.bold), size: 9 });
+        this.text(line.value, rightX + 8, ry + 2, {
+          bold: Boolean(line.bold),
+          size: 9,
+          width: rightWidth - 16,
+          align: "right",
         });
-    }
+      }
+      ry += h;
+    });
 
-    // Signatures Right
-    const sigX = this.margin + 300;
-    const sigWidth = this.contentWidth - 300;
+    this.currentY = startY + blockHeight + 14;
+  }
 
-    const signers = params.signatures || [
-      { title: "Customer Signature" },
-      { title: "Authorized Signatory", name: this.company.name },
-    ];
+  /**
+   * Non-financial documents (Delivery Challan, Delivery Receipt): terms or
+   * handling notes only — no subtotal/tax/paid/balance ever appears here.
+   */
+  renderNotesBlock(terms?: string) {
+    if (!terms) return;
+    const width = this.contentWidth;
+    const height = this.doc.font(FONT_REGULAR).fontSize(7.5).heightOfString(terms, { width }) + 24;
+    this.ensureSpace(height);
+    const y = this.currentY;
+    this.text("Terms and Conditions", this.margin, y, { bold: true, size: 8.5 });
+    this.text(terms, this.margin, y + 12, { size: 7.5, color: COLORS.muted, width });
+    this.currentY = y + height;
+  }
 
-    const itemWidth = sigWidth / signers.length;
+  /**
+   * Signature slots. A single signer (the Bill of Supply / Payment Receipt
+   * pattern) sits bottom-right; multiple signers (Delivery Challan /
+   * Delivery Receipt) spread evenly across the full width.
+   */
+  renderSignatureBlock(signers: Array<{ title: string; name?: string }>, align: "right" | "spread" = "right") {
+    if (align === "right" && signers.length === 1) {
+      const boxWidth = 220;
+      const signer = signers[0];
+      // A long branded name ("For: Aura Laundry - Koramangala Branch") can
+      // wrap to two lines — measure it so the line and label underneath
+      // are placed below it, never on top of it.
+      const nameText = signer.name ? `For: ${signer.name}` : "";
+      const nameHeight = nameText
+        ? this.doc.font(FONT_BOLD).fontSize(9).heightOfString(nameText, { width: boxWidth })
+        : 0;
+      const lineOffset = nameHeight + 8;
+      const blockHeight = lineOffset + 22;
 
-    signers.forEach((s, idx) => {
-      const sx = sigX + idx * itemWidth;
-      const sy = y + 45;
+      this.ensureSpace(blockHeight);
+      const y = this.currentY;
+      const x = this.margin + this.contentWidth - boxWidth;
 
+      if (nameText) {
+        this.text(nameText, x, y, { bold: true, size: 9, width: boxWidth, align: "center" });
+      }
       this.doc
-        .moveTo(sx + 10, sy)
-        .lineTo(sx + itemWidth - 10, sy)
+        .moveTo(x, y + lineOffset)
+        .lineTo(x + boxWidth, y + lineOffset)
         .strokeColor(COLORS.border)
         .lineWidth(0.75)
         .stroke();
+      this.text(signer.title, x, y + lineOffset + 6, { bold: true, size: 8.5, width: boxWidth, align: "center" });
+      this.currentY = y + blockHeight;
+      return;
+    }
 
+    const itemWidth = this.contentWidth / signers.length;
+    const slotWidth = itemWidth - 10;
+
+    const nameHeight = (name?: string) =>
+      name ? this.doc.font(FONT_BOLD).fontSize(8).heightOfString(name, { width: slotWidth }) : 0;
+    const maxNameHeight = Math.max(...signers.map((s) => nameHeight(s.name)), 0);
+    const lineOffset = maxNameHeight + 6;
+    const blockHeight = lineOffset + 24;
+
+    this.ensureSpace(blockHeight);
+    const y = this.currentY;
+
+    signers.forEach((s, idx) => {
+      const sx = this.margin + idx * itemWidth;
+      const lineY = y + lineOffset;
       if (s.name) {
-        this.doc
-          .fillColor(COLORS.charcoal)
-          .fontSize(8)
-          .font("Helvetica-Bold")
-          .text(s.name, sx + 5, sy - 14, { width: itemWidth - 10, align: "center" });
+        this.text(s.name, sx + 5, y, { bold: true, size: 8, width: slotWidth, align: "center" });
       }
-
       this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(8)
-        .font("Helvetica-Bold")
-        .text(s.title, sx + 5, sy + 6, { width: itemWidth - 10, align: "center" });
+        .moveTo(sx + 10, lineY)
+        .lineTo(sx + itemWidth - 10, lineY)
+        .strokeColor(COLORS.border)
+        .lineWidth(0.75)
+        .stroke();
+      this.text(s.title, sx + 5, lineY + 5, { bold: true, size: 8, width: slotWidth, align: "center" });
     });
 
-    this.currentY = y + 95;
+    this.currentY = y + blockHeight;
   }
 
   /**
-   * Finalizes document and adds page numbers ("Page X of Y") to all pages.
+   * Finalizes the document. Page numbers are only stamped when the
+   * document actually spans more than one page — a single-page document
+   * (the common case for a short item list) gets no footer clutter at all.
    */
   async build(): Promise<Buffer> {
     const pages = this.doc.bufferedPageRange();
 
-    for (let i = 0; i < pages.count; i++) {
-      this.doc.switchToPage(i);
-
-      // Bottom Footer Bar — kept inside the reserved band between
-      // maxContentY and the page's own bottom margin (pageHeight - margin).
-      // Drawing text past that margin boundary makes PDFKit silently insert
-      // a fresh page to keep "flowing" it, which is how this document used
-      // to grow spurious trailing pages.
-      const footerY = this.maxContentY + 10;
-      const footerLineHeight = 14;
-
-      this.doc
-        .moveTo(this.margin, footerY)
-        .lineTo(this.pageWidth - this.margin, footerY)
-        .strokeColor(COLORS.border)
-        .lineWidth(0.5)
-        .stroke();
-
-      const footerParts = [
-        this.company.name,
-        this.company.phone ? `Phone: ${this.company.phone}` : null,
-        this.company.email ? `Email: ${this.company.email}` : null,
-        this.company.gstin ? `GSTIN: ${this.company.gstin}` : null,
-      ].filter(Boolean);
-
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(8)
-        .font("Helvetica")
-        .text(footerParts.join(" • "), this.margin, footerY + 6, {
-          width: this.contentWidth - 80,
-          height: footerLineHeight,
-          ellipsis: true,
-          lineBreak: false,
-        });
-
-      this.doc
-        .fillColor(COLORS.slate)
-        .fontSize(8)
-        .font("Helvetica-Bold")
-        .text(`Page ${i + 1} of ${pages.count}`, this.margin, footerY + 6, {
+    if (pages.count > 1) {
+      for (let i = 0; i < pages.count; i++) {
+        this.doc.switchToPage(i);
+        // Must stay inside the document's own bottom margin
+        // (pageHeight - margin) — that exact line is also where PDFKit's
+        // own auto-pagination trigger lives, and text placed past it (as
+        // this used to be, at margin + 6) makes PDFKit silently insert a
+        // fresh blank page to keep "flowing" it, doubling the real page
+        // count with blank pages that carry only a footer.
+        this.text(`Page ${i + 1} of ${pages.count}`, this.margin, this.pageHeight - this.margin - 14, {
+          size: 7.5,
+          color: COLORS.muted,
           width: this.contentWidth,
-          height: footerLineHeight,
           align: "right",
           lineBreak: false,
         });
+      }
     }
 
     this.doc.end();
@@ -603,3 +619,5 @@ export class PDFDocumentBuilder {
     });
   }
 }
+
+export { amountInWordsHelper as amountInWords };
