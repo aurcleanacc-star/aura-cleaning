@@ -75,6 +75,7 @@ export async function createFirmAction(
     });
 
     await recordAudit({
+      firmId: result.firm.id,
       action: "FIRM_CREATED",
       entity: "Firm",
       entityId: result.firm.id,
@@ -116,6 +117,7 @@ export async function updateFirmAction(payload: unknown): Promise<ActionResult<n
     });
 
     await recordAudit({
+      firmId: input.id,
       action: "FIRM_UPDATED",
       entity: "Firm",
       entityId: input.id,
@@ -150,6 +152,7 @@ export async function setFirmStatusAction(
     await prisma.firm.update({ where: { id: firmId }, data: { status } });
 
     await recordAudit({
+      firmId,
       action: status === "ACTIVE" ? "FIRM_ACTIVATED" : "FIRM_DEACTIVATED",
       entity: "Firm",
       entityId: firmId,
@@ -182,6 +185,7 @@ export async function resetFirmAdminAccessCodeAction(
     await prisma.user.update({ where: { id: userId }, data: { accessCode } });
 
     await recordAudit({
+      firmId: admin.firmId,
       action: "FIRM_ADMIN_ACCESS_CODE_RESET",
       entity: "User",
       entityId: userId,

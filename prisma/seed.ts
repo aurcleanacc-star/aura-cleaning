@@ -468,6 +468,7 @@ async function seedUsers(branches: {
     const user = await prisma.user.upsert({
       where: { email: definition.email },
       create: {
+        firmId: FIRM_ID,
         employeeCode: definition.employeeCode,
         name: definition.name,
         email: definition.email,
@@ -486,6 +487,7 @@ async function seedUsers(branches: {
         ...(definition.driver ? { driver: { create: definition.driver } } : {}),
       },
       update: {
+        firmId: FIRM_ID,
         accessCode: definition.accessCode,
         role: definition.role,
         branchId: definition.branchId,
