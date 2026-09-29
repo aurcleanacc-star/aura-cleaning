@@ -11,7 +11,7 @@ import { formatCurrency } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { parseScan } from "@/lib/codes";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { GARMENT_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
 import { param, scopedBranchId, type SearchParams } from "@/lib/queries/filters";
 import {
@@ -45,6 +45,7 @@ export default async function SearchPage({
   }
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
 
   // Typing a category name is asking "show me every one of these and where it
   // is", which is the tracking screen, not a list of loose matches.
@@ -57,9 +58,9 @@ export default async function SearchPage({
   if (parsed.kind === "garment") {
     const garment = await prisma.garment.findUnique({
       where: { garmentCode: parsed.value },
-      select: { garmentCode: true, branchId: true },
+      select: { garmentCode: true, branchId: true, firmId: true },
     });
-    if (garment && (!branchId || garment.branchId === branchId)) {
+    if (garment && garment.firmId === firmId && (!branchId || garment.branchId === branchId)) {
       redirect(`/garments/${garment.garmentCode}`);
     }
   }
@@ -70,6 +71,7 @@ export default async function SearchPage({
   const [orders, garments, customers] = await Promise.all([
     prisma.order.findMany({
       where: {
+        firmId,
         ...branchFilter,
         OR: [
           { orderNumber: { contains: upper } },
@@ -85,6 +87,7 @@ export default async function SearchPage({
     }),
     prisma.garment.findMany({
       where: {
+        firmId,
         ...branchFilter,
         OR: [
           { garmentCode: { contains: upper } },
@@ -102,6 +105,7 @@ export default async function SearchPage({
     hasPermission(user, PERMISSIONS.CUSTOMER_VIEW)
       ? prisma.customer.findMany({
           where: {
+            firmId,
             ...(branchId ? { branchId } : {}),
             OR: [
               { name: { contains: query, mode: "insensitive" } },

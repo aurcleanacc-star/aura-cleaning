@@ -21,7 +21,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import { STAGE_LABELS } from "@/lib/workflow";
 import type { ProcessingStage } from "@/generated/prisma/enums";
@@ -29,18 +29,21 @@ import type { ProcessingStage } from "@/generated/prisma/enums";
 export const metadata = { title: "Catalogue" };
 
 export default async function CataloguePage() {
-  await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
+  const user = await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
+  const firmId = requireFirmId(user);
 
   const [services, garmentTypes, rates] = await Promise.all([
     prisma.service.findMany({
+      where: { firmId },
       orderBy: { name: "asc" },
       include: { _count: { select: { orderItems: true, garments: true } } },
     }),
     prisma.garmentType.findMany({
+      where: { firmId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       include: { _count: { select: { orderItems: true, garments: true } } },
     }),
-    prisma.serviceRate.findMany(),
+    prisma.serviceRate.findMany({ where: { service: { firmId } } }),
   ]);
 
   /** How many places a catalogue entry is already referenced from. */

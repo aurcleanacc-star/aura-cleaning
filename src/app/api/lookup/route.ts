@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { AuthorizationError, getCurrentUser, requireFirmId } from "@/lib/session";
 import { isGlobalRole } from "@/lib/rbac";
 import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 
@@ -12,6 +12,16 @@ import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let firmId: string;
+  try {
+    firmId = requireFirmId(user);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
 
   const limit = rateLimit(
     `lookup:${user.id}`,
@@ -32,13 +42,13 @@ export async function GET(request: Request) {
   const [order, garment] = await Promise.all([
     orderNumber
       ? prisma.order.findFirst({
-          where: { orderNumber, ...branchFilter },
+          where: { orderNumber, firmId, ...branchFilter },
           select: { id: true, orderNumber: true, customerName: true },
         })
       : null,
     garmentCode
       ? prisma.garment.findFirst({
-          where: { garmentCode, ...branchFilter },
+          where: { garmentCode, firmId, ...branchFilter },
           select: { id: true, garmentCode: true, orderId: true },
         })
       : null,

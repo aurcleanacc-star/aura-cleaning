@@ -39,7 +39,7 @@ export async function createComplaintAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.COMPLAINT_CREATE);
     const input = createComplaintSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.orderId) {
       const order = await prisma.order.findUnique({

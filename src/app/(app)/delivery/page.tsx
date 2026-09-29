@@ -23,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime, todayRange } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   branchOptions,
   enumOptions,
@@ -74,6 +74,7 @@ export default async function DeliveryPage({
   const user = await requirePermission(PERMISSIONS.DELIVERY_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const tab = param(params, "tab") ?? "deliveries";
   const status = param(params, "status");
   const search = param(params, "q");
@@ -81,6 +82,7 @@ export default async function DeliveryPage({
   const branchWhere = branchId ? { branchId } : {};
 
   const pickupWhere: Prisma.PickupWhereInput = {
+    branch: { firmId },
     ...branchWhere,
     ...(status && status !== "all" ? { status: status as never } : {}),
     ...(search
@@ -96,6 +98,7 @@ export default async function DeliveryPage({
   };
 
   const deliveryWhere: Prisma.DeliveryWhereInput = {
+    firmId,
     ...branchWhere,
     ...(status && status !== "all" ? { status: status as never } : {}),
     ...(search
@@ -142,6 +145,7 @@ export default async function DeliveryPage({
     prisma.driver.findMany({
       where: {
         user: {
+          firmId,
           status: "ACTIVE",
           ...(branchId ? { branchId } : {}),
         },
@@ -150,6 +154,7 @@ export default async function DeliveryPage({
     }),
     prisma.order.findMany({
       where: {
+        firmId,
         ...branchWhere,
         status: "READY",
         deliveries: { none: { status: { in: ["PENDING", "DRIVER_ASSIGNED", "OUT_FOR_DELIVERY"] } } },
@@ -166,14 +171,15 @@ export default async function DeliveryPage({
       },
     }),
     prisma.pickup.count({
-      where: { ...branchWhere, scheduledAt: { gte: today.from, lte: today.to } },
+      where: { branch: { firmId }, ...branchWhere, scheduledAt: { gte: today.from, lte: today.to } },
     }),
     prisma.delivery.count({
-      where: { ...branchWhere, scheduledAt: { gte: today.from, lte: today.to } },
+      where: { firmId, ...branchWhere, scheduledAt: { gte: today.from, lte: today.to } },
     }),
-    prisma.order.count({ where: { ...branchWhere, status: "READY" } }),
+    prisma.order.count({ where: { firmId, ...branchWhere, status: "READY" } }),
     prisma.delivery.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         status: { in: ["PENDING", "DRIVER_ASSIGNED", "OUT_FOR_DELIVERY"] },
       },

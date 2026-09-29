@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, hasPermission } from "@/lib/session";
+import { AuthorizationError, getCurrentUser, hasPermission, requireFirmId } from "@/lib/session";
 import { isGlobalRole, PERMISSIONS } from "@/lib/rbac";
 import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import { num, round2 } from "@/lib/money";
@@ -30,6 +30,16 @@ export async function GET(request: Request) {
 
   if (!hasPermission(user, PERMISSIONS.REPORT_EXPORT)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  let firmId: string;
+  try {
+    firmId = requireFirmId(user);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
   }
 
   const limit = rateLimit(
@@ -66,7 +76,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       const orders = await prisma.order.findMany({
-        where: { ...branchFilter, placedAt: { gte: range.from, lte: range.to } },
+        where: { firmId, ...branchFilter, placedAt: { gte: range.from, lte: range.to } },
         orderBy: { placedAt: "asc" },
         include: { branch: { select: { name: true } } },
       });
@@ -107,7 +117,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       const deliveries = await prisma.delivery.findMany({
-        where: { ...branchFilter, scheduledAt: { gte: range.from, lte: range.to } },
+        where: { firmId, ...branchFilter, scheduledAt: { gte: range.from, lte: range.to } },
         orderBy: { scheduledAt: "asc" },
         include: {
           order: { select: { orderNumber: true } },
@@ -146,7 +156,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       const transactions = await prisma.inventoryTransaction.findMany({
-        where: { ...branchFilter, createdAt: { gte: range.from, lte: range.to } },
+        where: { item: { firmId }, ...branchFilter, createdAt: { gte: range.from, lte: range.to } },
         orderBy: { createdAt: "asc" },
         include: {
           item: { select: { sku: true, name: true, unit: true } },
@@ -178,6 +188,7 @@ export async function GET(request: Request) {
       }
       const payments = await prisma.payment.findMany({
         where: {
+          firmId,
           ...branchFilter,
           state: "CAPTURED",
           paidAt: { gte: range.from, lte: range.to },
@@ -212,6 +223,7 @@ export async function GET(request: Request) {
       filename = "sales-report.csv";
       const orders = await prisma.order.findMany({
         where: {
+          firmId,
           ...branchFilter,
           placedAt: { gte: range.from, lte: range.to },
           status: { not: "CANCELLED" },

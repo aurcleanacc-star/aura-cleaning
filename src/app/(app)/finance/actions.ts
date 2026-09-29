@@ -32,7 +32,7 @@ export async function recordIncomingMoneyAction(payload: unknown): Promise<Actio
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.BILLING_RECORD_PAYMENT);
     const input = recordIncomingSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const payRef = await nextPaymentNumber();
 
@@ -121,7 +121,7 @@ export async function recordOutgoingMoneyAction(payload: unknown): Promise<Actio
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
     const input = recordOutgoingSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const expRef = await nextExpenseNumber();
 
@@ -184,7 +184,7 @@ export async function transferCashBankAction(payload: unknown): Promise<ActionRe
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.FINANCE_MANAGE);
     const input = transferSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const result = await transferCashBank({
       branchId,
@@ -254,7 +254,7 @@ export async function saveBankAccountAction(payload: unknown): Promise<ActionRes
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.BANK_MANAGE);
     const input = bankAccountSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.id) {
       const existing = await prisma.bankAccount.findUnique({
@@ -304,7 +304,7 @@ export async function submitReconciliationAction(payload: unknown): Promise<Acti
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.RECONCILE_MANAGE);
     const input = reconciliationSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const rec = await postReconciliation({
       branchId,

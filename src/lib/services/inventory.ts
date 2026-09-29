@@ -83,9 +83,9 @@ export async function applyStockMovement(
 }
 
 /** Items at or below their minimum level, for the dashboard and alerts. */
-export async function lowStockItems(branchId?: string) {
+export async function lowStockItems(firmId: string, branchId?: string) {
   const stocks = await prisma.inventoryStock.findMany({
-    where: { ...(branchId ? { branchId } : {}), item: { isActive: true } },
+    where: { ...(branchId ? { branchId } : {}), item: { firmId, isActive: true } },
     include: {
       item: { select: { id: true, sku: true, name: true, unit: true, minStockLevel: true, category: true } },
       branch: { select: { id: true, name: true } },

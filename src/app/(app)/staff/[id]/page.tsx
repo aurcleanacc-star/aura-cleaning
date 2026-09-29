@@ -24,7 +24,7 @@ import {
   ROLE_LABELS,
   defaultPermissionsFor,
 } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize, initials } from "@/lib/utils";
 
 export const metadata = { title: "Staff member" };
@@ -54,6 +54,7 @@ export default async function StaffDetailPage({
 
   if (!staff) notFound();
   assertBranchAccess(viewer, staff.branchId);
+  assertFirmAccess(viewer, staff.firmId);
 
   const [allPermissions, completedTasks, recentTasks] = await Promise.all([
     prisma.permission.findMany({ orderBy: [{ module: "asc" }, { code: "asc" }] }),

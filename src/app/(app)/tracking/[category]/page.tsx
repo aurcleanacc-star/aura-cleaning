@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { pageParam, param, type SearchParams } from "@/lib/queries/filters";
 import { parseCategory, categorySlug } from "@/lib/garment-categories";
 import {
@@ -49,8 +49,10 @@ export default async function CategoryTrackingPage({
     : user.branchId
       ? [user.branchId]
       : [];
+  const firmId = requireFirmId(user);
 
   const page = await getCategoryPage({
+    firmId,
     category,
     branchIds,
     search: param(query, "q"),

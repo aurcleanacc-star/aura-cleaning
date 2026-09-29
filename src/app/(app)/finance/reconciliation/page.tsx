@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   listReconciliations,
   listBankAccounts,
@@ -14,10 +14,11 @@ export default async function ReconciliationPage() {
   const user = await requirePermission(PERMISSIONS.FINANCE_VIEW);
 
   const branchId = user.branchId ?? "main";
+  const firmId = requireFirmId(user);
 
   const [reconciliations, bankAccounts, cash] = await Promise.all([
     listReconciliations(branchId),
-    listBankAccounts(branchId),
+    listBankAccounts(firmId, branchId),
     getCashAccountSummary(branchId),
   ]);
 

@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 export const metadata = { title: "Complaint" };
@@ -58,6 +58,7 @@ export default async function ComplaintDetailPage({
 
   if (!complaint) notFound();
   assertBranchAccess(user, complaint.branchId);
+  assertFirmAccess(user, complaint.firmId);
 
   const assignees = await prisma.user.findMany({
     where: {

@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { getCustomerProfile } from "@/lib/services/customers";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import type { OrderStatus } from "@/generated/prisma/enums";
@@ -42,7 +42,7 @@ export default async function CustomerProfilePage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.CUSTOMER_VIEW);
 
-  const customer = await getCustomerProfile(id).catch(() => null);
+  const customer = await getCustomerProfile(id, requireFirmId(user)).catch(() => null);
   if (!customer) notFound();
   assertBranchAccess(user, customer.branchId);
 

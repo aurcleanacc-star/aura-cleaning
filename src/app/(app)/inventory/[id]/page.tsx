@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatNumber, num } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { isGlobalRole } from "@/lib/rbac";
 import { humanize } from "@/lib/utils";
 
@@ -48,12 +48,13 @@ export default async function InventoryItemPage({
   const { id } = await params;
   const user = await requirePermission(PERMISSIONS.INVENTORY_VIEW);
 
+  const firmId = requireFirmId(user);
   const branchFilter = isGlobalRole(user.role)
     ? {}
     : { branchId: user.branchId ?? "__none__" };
 
   const item = await prisma.inventoryItem.findFirst({
-    where: { OR: [{ id }, { sku: id }] },
+    where: { firmId, OR: [{ id }, { sku: id }] },
     include: {
       stocks: {
         where: branchFilter,

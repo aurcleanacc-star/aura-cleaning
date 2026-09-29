@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/dates";
 import { NOTIFICATION_EVENT_LABELS } from "@/lib/services/notifications";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { scopedBranchId, type SearchParams } from "@/lib/queries/filters";
 import type { NotificationEvent } from "@/generated/prisma/enums";
 
@@ -27,6 +27,7 @@ export default async function NotificationsPage({
   const params = await searchParams;
   const user = await requirePermission(PERMISSIONS.NOTIFICATION_VIEW);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const canManage = hasPermission(user, PERMISSIONS.NOTIFICATION_MANAGE);
 
   const [templates, notifications, sent, failed] = await Promise.all([
@@ -34,7 +35,7 @@ export default async function NotificationsPage({
       orderBy: [{ event: "asc" }, { channel: "asc" }],
     }),
     prisma.notification.findMany({
-      where: { ...(branchId ? { branchId } : {}) },
+      where: { branch: { firmId }, ...(branchId ? { branchId } : {}) },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -43,10 +44,14 @@ export default async function NotificationsPage({
       },
     }),
     prisma.notification.count({
-      where: { status: { in: ["SENT", "DELIVERED", "READ"] }, ...(branchId ? { branchId } : {}) },
+      where: {
+        branch: { firmId },
+        status: { in: ["SENT", "DELIVERED", "READ"] },
+        ...(branchId ? { branchId } : {}),
+      },
     }),
     prisma.notification.count({
-      where: { status: "FAILED", ...(branchId ? { branchId } : {}) },
+      where: { branch: { firmId }, status: "FAILED", ...(branchId ? { branchId } : {}) },
     }),
   ]);
 

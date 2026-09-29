@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS, STAGE_PERMISSION } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { STAGE_LABELS, WORKSTATION_STAGES } from "@/lib/workflow";
 import { scopedBranchId, type SearchParams } from "@/lib/queries/filters";
 import type { PermissionCode } from "@/lib/rbac";
@@ -27,10 +27,11 @@ export default async function ProcessingPage({
   const params = await searchParams;
   const user = await requirePermission(PERMISSIONS.PROCESSING_VIEW);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
 
   const grouped = await prisma.processingTask.groupBy({
     by: ["stage", "status"],
-    where: { ...(branchId ? { branchId } : {}) },
+    where: { branch: { firmId }, ...(branchId ? { branchId } : {}) },
     _count: { _all: true },
   });
 

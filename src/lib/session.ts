@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { isGlobalRole, isPlatformRole, type PermissionCode } from "@/lib/rbac";
 import type { UserRole } from "@/generated/prisma/enums";
 
@@ -48,6 +49,19 @@ export class AuthenticationError extends Error {
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
+
+  const firmId = session.user.firmId ?? null;
+  if (firmId) {
+    // JWT sessions are stateless, so a firm deactivated after a user's
+    // token was issued would otherwise keep working until the token next
+    // refreshes. Re-verified on every request so login, API access, order
+    // creation and scanning all stop immediately for a deactivated firm's
+    // users, per the multi-tenant spec's deactivation requirement — without
+    // ever deleting the firm's existing data.
+    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { status: true } });
+    if (!firm || firm.status !== "ACTIVE") return null;
+  }
+
   return {
     id: session.user.id,
     name: session.user.name ?? "",
@@ -189,14 +203,32 @@ export function assertFirmAccess(user: SessionUser, recordFirmId: string | null 
   }
 }
 
-/** The branch a newly created record should be filed under. */
-export function requireWriteBranch(
+/**
+ * The branch a newly created record should be filed under. For a global
+ * role that requested a specific branch, the branch is verified to belong
+ * to the caller's own firm before being trusted — otherwise a manipulated
+ * branchId could file a record under another firm's branch while its
+ * firmId (set separately via requireFirmId) is the caller's own, breaking
+ * the "a branchId always belongs to its own firmId" invariant other checks
+ * in this file rely on.
+ */
+export async function requireWriteBranch(
   user: SessionUser,
   requestedBranchId?: string | null,
-): string {
+): Promise<string> {
   if (isGlobalRole(user.role)) {
     const branchId = requestedBranchId ?? user.branchId;
     if (!branchId) throw new AuthorizationError("A branch must be selected");
+    if (requestedBranchId) {
+      const firmId = requireFirmId(user);
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { firmId: true },
+      });
+      if (!branch || branch.firmId !== firmId) {
+        throw new AuthorizationError("That branch does not belong to your organization");
+      }
+    }
     return branchId;
   }
   if (!user.branchId) {

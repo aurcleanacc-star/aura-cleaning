@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppSessionProvider } from "@/components/providers/session-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,8 +26,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-dvh antialiased">
-        <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
-        <Toaster />
+        <AppSessionProvider>
+          <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
+          <Toaster />
+        </AppSessionProvider>
       </body>
     </html>
   );

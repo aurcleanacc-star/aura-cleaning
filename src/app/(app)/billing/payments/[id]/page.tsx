@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 import { VoidPaymentButton } from "@/app/(app)/billing/payment-actions";
@@ -57,6 +57,7 @@ export default async function PaymentDetailPage({
 
   if (!payment) notFound();
   assertBranchAccess(user, payment.branchId);
+  assertFirmAccess(user, payment.firmId);
 
   const refunded = payment.refunds
     .filter((refund) => refund.status === "PROCESSED")

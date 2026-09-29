@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime, todayRange } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   PAGE_SIZE,
   branchOptions,
@@ -76,6 +76,7 @@ export default async function BillingPage({
 
   const page = pageParam(params);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params);
   const search = param(params, "q");
   const status = param(params, "status");
@@ -83,7 +84,7 @@ export default async function BillingPage({
   const tab = param(params, "tab") ?? "invoices";
   const today = todayRange();
 
-  const branchWhere = branchId ? { branchId } : {};
+  const branchWhere = { firmId, ...(branchId ? { branchId } : {}) };
 
   const invoiceWhere: Prisma.InvoiceWhereInput = {
     ...branchWhere,

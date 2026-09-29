@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listExpenses, getMonthlyExpenseSummary } from "@/lib/services/expenses";
 import { ExpensesView } from "./expenses-view";
 
@@ -12,10 +12,11 @@ export default async function ExpensesPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
   const [expenses, summary] = await Promise.all([
-    listExpenses({ branchId, limit: 150 }),
-    getMonthlyExpenseSummary(branchId),
+    listExpenses({ firmId, branchId, limit: 150 }),
+    getMonthlyExpenseSummary(firmId, branchId),
   ]);
 
   const canManage = hasPermission(user, PERMISSIONS.EXPENSE_MANAGE);

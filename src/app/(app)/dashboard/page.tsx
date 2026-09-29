@@ -47,7 +47,7 @@ import {
 import { getFinancialOverview } from "@/lib/services/accounting";
 import { detectMismatches } from "@/lib/services/garment-tracking";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import {
   branchOptions,
@@ -69,6 +69,7 @@ export default async function DashboardPage({
   const user = await requirePermission(PERMISSIONS.DASHBOARD_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params) ?? {
     from: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000),
     to: new Date(),
@@ -107,16 +108,17 @@ export default async function DashboardPage({
     revenueSeries(filters),
     orderStatusBreakdown(filters),
     servicePerformance(filters),
-    stagePipeline(branchId),
+    stagePipeline(firmId, branchId),
     deliveryMetrics(filters),
     branchOptions(user),
     prisma.service.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.order.findMany({
       where: {
+        firmId,
         ...(branchId ? { branchId } : {}),
         status: { notIn: ["DELIVERED", "CANCELLED", "REFUNDED"] },
       },
@@ -133,8 +135,8 @@ export default async function DashboardPage({
       },
     }),
     canSeeAllBranches ? branchPerformance(range) : Promise.resolve([]),
-    detectMismatches({ branchIds: branchId ? [branchId] : null }),
-    canSeeMoney ? getFinancialOverview(branchId) : Promise.resolve(null),
+    detectMismatches({ firmId, branchIds: branchId ? [branchId] : null }),
+    canSeeMoney ? getFinancialOverview(firmId, branchId) : Promise.resolve(null),
   ]);
 
   const mismatchCount = mismatchFindings.length;

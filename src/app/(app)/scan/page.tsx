@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listScanHistory } from "@/lib/services/scanning";
 
 import { ScanContainer } from "./scan-container";
@@ -11,6 +11,7 @@ export default async function ScanPage() {
   const user = await requirePermission(PERMISSIONS.GARMENT_SCAN);
 
   const history = await listScanHistory({
+    firmId: requireFirmId(user),
     branchIds: hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
       ? null
       : user.branchId

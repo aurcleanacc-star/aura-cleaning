@@ -19,7 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num, round2 } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   branchOptions,
   enumOptions,
@@ -64,11 +64,13 @@ export default async function PurchasesPage({
   const user = await requirePermission(PERMISSIONS.PURCHASE_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const tab = param(params, "tab") ?? "orders";
   const search = param(params, "q");
   const status = param(params, "status");
 
   const poWhere: Prisma.PurchaseOrderWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(status && status !== "all" ? { status: status as never } : {}),
     ...(search
@@ -102,6 +104,7 @@ export default async function PurchasesPage({
       },
     }),
     prisma.supplier.findMany({
+      where: { firmId },
       orderBy: { name: "asc" },
       include: {
         purchaseInvoices: { select: { total: true, amountPaid: true, status: true } },
@@ -109,11 +112,15 @@ export default async function PurchasesPage({
       },
     }),
     prisma.purchaseInvoice.findMany({
-      where: { status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] } },
+      where: {
+        supplier: { firmId },
+        status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] },
+      },
       orderBy: { invoiceDate: "desc" },
       include: { supplier: { select: { id: true, name: true } } },
     }),
     prisma.supplierPayment.findMany({
+      where: { supplier: { firmId } },
       orderBy: { paidAt: "desc" },
       take: 50,
       include: {
@@ -122,20 +129,24 @@ export default async function PurchasesPage({
       },
     }),
     prisma.inventoryItem.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, sku: true, unit: true, costPrice: true },
     }),
     branchOptions(user),
     prisma.purchaseOrder.aggregate({
       where: {
+        firmId,
         ...(branchId ? { branchId } : {}),
         status: { in: ["SENT", "PARTIALLY_RECEIVED"] },
       },
       _sum: { total: true },
     }),
     prisma.purchaseInvoice.findMany({
-      where: { status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] } },
+      where: {
+        supplier: { firmId },
+        status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] },
+      },
       select: { total: true, amountPaid: true },
     }),
   ]);

@@ -56,7 +56,7 @@ export async function createOrderAction(
     }
 
     const input = createOrderSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.discountAmount > 0 && !hasPermission(user, PERMISSIONS.ORDER_APPLY_DISCOUNT)) {
       throw new BusinessRuleError("You are not allowed to apply discounts");

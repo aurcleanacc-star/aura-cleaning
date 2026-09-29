@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { isGlobalRole } from "@/lib/rbac";
 import { detectMismatches } from "@/lib/services/garment-tracking";
-import type { SessionUser } from "@/lib/session";
+import { requireFirmId, type SessionUser } from "@/lib/session";
 
 export type AlertKind =
   | "MISMATCH"
@@ -45,20 +45,21 @@ const EMPTY_BY_KIND: Record<AlertKind, number> = {
  * thing it is complaining about is put right.
  */
 export async function getAlerts(user: SessionUser, limit = 30): Promise<AlertFeed> {
+  const firmId = requireFirmId(user);
   const branchIds = isGlobalRole(user.role)
     ? null
     : user.branchId
       ? [user.branchId]
       : [];
 
-  const branchWhere = branchIds ? { branchId: { in: branchIds } } : {};
+  const branchWhere = { firmId, ...(branchIds ? { branchId: { in: branchIds } } : {}) };
   const now = new Date();
 
   const canSeeTracking = user.permissions.includes("tracking.view" as never);
   const canSeeMoney = user.permissions.includes("billing.view" as never);
 
   const [findings, delayed, unpaid] = await Promise.all([
-    canSeeTracking ? detectMismatches({ branchIds, limit: 40 }) : Promise.resolve([]),
+    canSeeTracking ? detectMismatches({ firmId, branchIds, limit: 40 }) : Promise.resolve([]),
     prisma.order.findMany({
       where: {
         ...branchWhere,

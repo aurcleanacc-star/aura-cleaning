@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   PAGE_SIZE,
@@ -49,11 +49,13 @@ export default async function AuditPage({
 
   const page = pageParam(params);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params);
   const search = param(params, "q");
   const entity = param(params, "entity");
 
   const where: Prisma.AuditLogWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(entity && entity !== "all" ? { entity } : {}),
     ...(range ? { createdAt: { gte: range.from, lte: range.to } } : {}),
@@ -81,7 +83,7 @@ export default async function AuditPage({
       },
     }),
     prisma.auditLog.count({ where }),
-    prisma.auditLog.groupBy({ by: ["entity"], _count: { _all: true } }),
+    prisma.auditLog.groupBy({ by: ["entity"], where: { firmId }, _count: { _all: true } }),
     branchOptions(user),
   ]);
 

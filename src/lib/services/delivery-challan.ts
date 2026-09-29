@@ -18,6 +18,7 @@ export interface CreateDeliveryChallanParams {
 }
 
 export interface GetDeliveryChallansParams {
+  firmId: string;
   page?: number;
   limit?: number;
   search?: string;
@@ -189,8 +190,9 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
 /**
  * Fetches Delivery Challans with search, filtering, and pagination.
  */
-export async function getDeliveryChallans(params: GetDeliveryChallansParams = {}) {
+export async function getDeliveryChallans(params: GetDeliveryChallansParams) {
   const {
+    firmId,
     page = 1,
     limit = 20,
     search,
@@ -204,7 +206,7 @@ export async function getDeliveryChallans(params: GetDeliveryChallansParams = {}
     sortOrder = "desc",
   } = params;
 
-  const where: Prisma.DeliveryChallanWhereInput = {};
+  const where: Prisma.DeliveryChallanWhereInput = { firmId };
 
   if (branchId) {
     where.branchId = branchId;
@@ -524,8 +526,8 @@ export async function cancelDeliveryChallan(id: string, reason: string, userId?:
 /**
  * Calculates Delivery Challan statistics for Dashboard and Module views.
  */
-export async function getChallanStats(branchId?: string) {
-  const where: Prisma.DeliveryChallanWhereInput = branchId ? { branchId } : {};
+export async function getChallanStats(firmId: string, branchId?: string) {
+  const where: Prisma.DeliveryChallanWhereInput = { firmId, ...(branchId ? { branchId } : {}) };
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

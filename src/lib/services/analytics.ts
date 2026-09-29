@@ -581,10 +581,11 @@ export async function financeMetrics(
 }
 
 /** Stage-by-stage queue depth, for the dashboard's processing chart. */
-export async function stagePipeline(branchId?: string) {
+export async function stagePipeline(firmId: string, branchId?: string) {
   const groups = await prisma.processingTask.groupBy({
     by: ["stage", "status"],
     where: {
+      branch: { firmId },
       ...(branchId ? { branchId } : {}),
       status: { in: ["PENDING", "IN_PROGRESS"] },
     },
@@ -633,7 +634,10 @@ export interface GarmentReport {
  * it derived from the same engine the mismatch centre uses, so a report and the
  * screen it summarises can never tell different stories.
  */
-export async function garmentReport(filters: DashboardFilters): Promise<GarmentReport> {
+export async function garmentReport(
+  filters: DashboardFilters,
+  firmId: string,
+): Promise<GarmentReport> {
   const branchIds = filters.branchId ? [filters.branchId] : null;
   const branchWhere = filters.branchId ? { branchId: filters.branchId } : {};
   const window = filters.range
@@ -643,31 +647,32 @@ export async function garmentReport(filters: DashboardFilters): Promise<GarmentR
   const [onFloor, ready, delivered, findings, scans, missingRows] = await Promise.all([
     prisma.garment.groupBy({
       by: ["trackingCategory"],
-      where: { ...branchWhere, status: { notIn: ["DELIVERED", "RETURNED"] } },
+      where: { firmId, ...branchWhere, status: { notIn: ["DELIVERED", "RETURNED"] } },
       _count: { _all: true },
     }),
     prisma.garment.groupBy({
       by: ["trackingCategory"],
-      where: { ...branchWhere, status: "READY" },
+      where: { firmId, ...branchWhere, status: "READY" },
       _count: { _all: true },
     }),
     prisma.garment.groupBy({
       by: ["trackingCategory"],
       where: {
+        firmId,
         ...branchWhere,
         status: "DELIVERED",
         ...(window ? { deliveredAt: window } : {}),
       },
       _count: { _all: true },
     }),
-    detectMismatches({ branchIds }),
+    detectMismatches({ firmId, branchIds }),
     prisma.garmentScan.groupBy({
       by: ["stage", "outcome"],
-      where: { ...branchWhere, ...(window ? { scannedAt: window } : {}) },
+      where: { garment: { firmId }, ...branchWhere, ...(window ? { scannedAt: window } : {}) },
       _count: { _all: true },
     }),
     prisma.garmentException.findMany({
-      where: { ...branchWhere, type: "MISSING", status: "OPEN" },
+      where: { branch: { firmId }, ...branchWhere, type: "MISSING", status: "OPEN" },
       orderBy: { reportedAt: "desc" },
       take: 25,
       select: {

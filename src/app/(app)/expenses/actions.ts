@@ -35,7 +35,7 @@ export async function saveExpenseAction(payload: unknown): Promise<ActionResult<
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
     const input = expenseSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.id) {
       const existing = await prisma.expense.findUnique({ where: { id: input.id } });

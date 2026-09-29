@@ -91,6 +91,7 @@ export async function scanHistoryAction(
       .parse(payload ?? {});
 
     return listScanHistory({
+      firmId: requireFirmId(user),
       branchIds: hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
         ? null
         : user.branchId

@@ -176,6 +176,15 @@ export async function saveServiceRateAction(payload: unknown): Promise<ActionRes
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.CATALOGUE_MANAGE);
     const input = serviceRateSchema.parse(payload);
+    const firmId = requireFirmId(user);
+
+    const [service, garmentType] = await Promise.all([
+      prisma.service.findUnique({ where: { id: input.serviceId }, select: { firmId: true } }),
+      prisma.garmentType.findUnique({ where: { id: input.garmentTypeId }, select: { firmId: true } }),
+    ]);
+    if (!service || service.firmId !== firmId || !garmentType || garmentType.firmId !== firmId) {
+      throw new BusinessRuleError("That service or garment type does not belong to your organization");
+    }
 
     await prisma.serviceRate.upsert({
       where: {
@@ -314,7 +323,7 @@ export async function createExpenseAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
     const input = expenseSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const expense = await prisma.expense.create({
       data: {

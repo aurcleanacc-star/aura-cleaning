@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listBankAccounts } from "@/lib/services/accounting";
 import { BankAccountsView } from "./bank-view";
 
@@ -12,8 +12,9 @@ export default async function BankAccountsPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
-  const accounts = await listBankAccounts(branchId);
+  const accounts = await listBankAccounts(firmId, branchId);
 
   const canManage = hasPermission(user, PERMISSIONS.BANK_MANAGE);
 

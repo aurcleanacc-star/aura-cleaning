@@ -5,6 +5,7 @@ import { num, round2 } from "@/lib/money";
 import type { ExpenseCategory, PaymentMethod, ExpenseStatus } from "@/generated/prisma/enums";
 
 export interface ExpenseFilters {
+  firmId: string;
   branchId?: string;
   category?: ExpenseCategory;
   search?: string;
@@ -33,6 +34,7 @@ export interface ExpenseRow {
 export async function listExpenses(filters: ExpenseFilters): Promise<ExpenseRow[]> {
   const rows = await prisma.expense.findMany({
     where: {
+      firmId: filters.firmId,
       ...(filters.branchId ? { branchId: filters.branchId } : {}),
       ...(filters.category ? { category: filters.category } : {}),
       ...(filters.from || filters.to
@@ -80,7 +82,7 @@ export async function listExpenses(filters: ExpenseFilters): Promise<ExpenseRow[
   }));
 }
 
-export async function getMonthlyExpenseSummary(branchId?: string): Promise<{
+export async function getMonthlyExpenseSummary(firmId: string, branchId?: string): Promise<{
   currentMonthTotal: number;
   categoryTotals: Record<string, number>;
 }> {
@@ -90,6 +92,7 @@ export async function getMonthlyExpenseSummary(branchId?: string): Promise<{
 
   const expenses = await prisma.expense.findMany({
     where: {
+      firmId,
       ...(branchId ? { branchId } : {}),
       expenseDate: { gte: startOfMonth, lte: endOfMonth },
       status: { in: ["APPROVED", "PAID", "PENDING"] },

@@ -20,7 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { branchOptions, pageParam, param, type SearchParams } from "@/lib/queries/filters";
 import { listCustomers, type CustomerSort } from "@/lib/services/customers";
 
@@ -58,9 +58,11 @@ export default async function CustomersPage({
 
   const seesAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
   const branchIds = seesAllBranches ? null : user.branchId ? [user.branchId] : [];
+  const firmId = requireFirmId(user);
 
   const [{ rows, total, pageSize }, branches, totals] = await Promise.all([
     listCustomers({
+      firmId,
       branchIds,
       search,
       sort: sort as CustomerSort,
@@ -73,7 +75,7 @@ export default async function CustomersPage({
     }),
     branchOptions(user),
     prisma.customer.aggregate({
-      where: branchIds ? { branchId: { in: branchIds } } : {},
+      where: { firmId, ...(branchIds ? { branchId: { in: branchIds } } : {}) },
       _count: { _all: true },
       _sum: { totalSpent: true, outstandingAmount: true },
     }),
@@ -81,6 +83,7 @@ export default async function CustomersPage({
 
   const repeatCount = await prisma.customer.count({
     where: {
+      firmId,
       ...(branchIds ? { branchId: { in: branchIds } } : {}),
       orderCount: { gt: 1 },
     },

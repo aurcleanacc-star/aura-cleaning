@@ -104,7 +104,7 @@ export async function createPurchaseOrderAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.PURCHASE_MANAGE);
     const input = purchaseOrderSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const supplier = await prisma.supplier.findUnique({
       where: { id: input.supplierId },
@@ -390,7 +390,7 @@ export async function createPurchaseReturnAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.PURCHASE_MANAGE);
     const input = purchaseReturnSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const total = round2(
       input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),

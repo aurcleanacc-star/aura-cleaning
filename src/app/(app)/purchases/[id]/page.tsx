@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 
 export const metadata = { title: "Purchase order" };
 
@@ -44,6 +44,7 @@ export default async function PurchaseOrderPage({
 
   if (!po) notFound();
   assertBranchAccess(user, po.branchId);
+  assertFirmAccess(user, po.firmId);
 
   const canManage = hasPermission(user, PERMISSIONS.PURCHASE_MANAGE);
   const open = !["RECEIVED", "CANCELLED", "CLOSED"].includes(po.status);

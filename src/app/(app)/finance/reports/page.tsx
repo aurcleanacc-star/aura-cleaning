@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { getPnLReport, getFinancialOverview } from "@/lib/services/accounting";
 import { FinancialReportsView } from "./financial-reports-view";
 
@@ -12,10 +12,11 @@ export default async function FinancialReportsPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
   const [pnl, metrics] = await Promise.all([
-    getPnLReport({ branchId }),
-    getFinancialOverview(branchId),
+    getPnLReport({ firmId, branchId }),
+    getFinancialOverview(firmId, branchId),
   ]);
 
   return (

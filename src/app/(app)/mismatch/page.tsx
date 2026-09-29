@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { param, type SearchParams } from "@/lib/queries/filters";
 import { GARMENT_CATEGORIES, categorySlug, parseCategory } from "@/lib/garment-categories";
 import {
@@ -46,14 +46,15 @@ export default async function MismatchPage({
     : user.branchId
       ? [user.branchId]
       : [];
+  const firmId = requireFirmId(user);
 
   const category = parseCategory(param(params, "category"));
   const kind = param(params, "kind");
   const search = param(params, "q")?.trim().toLowerCase();
 
   const [overview, allFindings] = await Promise.all([
-    getMismatchOverview(branchIds),
-    detectMismatches({ branchIds, category }),
+    getMismatchOverview(firmId, branchIds),
+    detectMismatches({ firmId, branchIds, category }),
   ]);
 
   const findings = allFindings.filter((finding) => {

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { SalesView } from "./sales-view";
@@ -13,9 +13,11 @@ export default async function SalesPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
   const rawOrders = await prisma.order.findMany({
     where: {
+      firmId,
       ...(branchId ? { branchId } : {}),
       status: { notIn: ["CANCELLED"] },
     },

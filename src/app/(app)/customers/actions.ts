@@ -36,7 +36,7 @@ export async function createCustomerAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.CUSTOMER_MANAGE);
     const input = createCustomerSchema.parse(payload);
-    requireWriteBranch(user, input.branchId);
+    await requireWriteBranch(user, input.branchId);
 
     const phone = normalisePhone(input.phone);
     const clash = await prisma.customer.findFirst({
@@ -210,6 +210,7 @@ export async function findCustomersAction(payload: unknown) {
     const { query } = z.object({ query: z.string().trim().max(80) }).parse(payload);
 
     return searchCustomersForOrder({
+      firmId: requireFirmId(user),
       branchIds: hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
         ? null
         : user.branchId

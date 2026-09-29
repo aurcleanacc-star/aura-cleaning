@@ -485,6 +485,7 @@ export interface ScanHistoryRow {
 }
 
 export async function listScanHistory(params: {
+  firmId: string;
   branchIds: string[] | null;
   limit?: number;
   onlyFailures?: boolean;
@@ -493,6 +494,7 @@ export async function listScanHistory(params: {
   const search = params.search?.trim();
   const rows = await prisma.scanEvent.findMany({
     where: {
+      firmId: params.firmId,
       ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
       ...(params.onlyFailures ? { succeeded: false } : {}),
       ...(search

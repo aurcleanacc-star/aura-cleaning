@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   GARMENT_STATUS_LABELS,
   STAGE_LABELS,
@@ -58,11 +58,13 @@ export default async function GarmentsPage({
 
   const page = pageParam(params);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const search = param(params, "q");
   const status = param(params, "status");
   const stage = param(params, "stage");
 
   const where: Prisma.GarmentWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(status && status !== "all" ? { status: status as GarmentStatus } : {}),
     ...(stage && stage !== "all" ? { currentStage: stage as ProcessingStage } : {}),

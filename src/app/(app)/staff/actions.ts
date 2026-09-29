@@ -10,8 +10,10 @@ import { cuidSchema } from "@/lib/validations/common";
 import { generateUniqueAccessCode } from "@/lib/access-code";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -48,10 +50,21 @@ export async function createStaffAction(
     const user = await authorize(PERMISSIONS.STAFF_MANAGE);
     const input = createStaffSchema.parse(payload);
     assertCanAssignRole(user.role, input.role);
+    const firmId = requireFirmId(user);
 
     const branchId = isGlobalRole(user.role)
       ? (input.branchId ?? user.branchId ?? null)
-      : requireWriteBranch(user, input.branchId);
+      : await requireWriteBranch(user, input.branchId);
+
+    if (branchId) {
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { firmId: true },
+      });
+      if (!branch || branch.firmId !== firmId) {
+        throw new BusinessRuleError("That branch does not belong to your organization");
+      }
+    }
 
     const existing = await prisma.user.findUnique({
       where: { email: input.email },
@@ -73,6 +86,7 @@ export async function createStaffAction(
           accessCode,
           role: input.role,
           branchId,
+          firmId,
           staffProfile: {
             create: {
               department: input.department ?? null,
@@ -125,10 +139,11 @@ export async function updateStaffAction(payload: unknown): Promise<ActionResult<
 
     const staff = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { id: true, branchId: true, role: true, name: true, email: true },
+      select: { id: true, branchId: true, firmId: true, role: true, name: true, email: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     assertBranchAccess(user, staff.branchId);
+    assertFirmAccess(user, staff.firmId);
     assertCanAssignRole(user.role, staff.role);
 
     if (staff.id === user.id && input.status !== "ACTIVE") {
@@ -137,7 +152,17 @@ export async function updateStaffAction(payload: unknown): Promise<ActionResult<
 
     const branchId = isGlobalRole(user.role)
       ? (input.branchId ?? null)
-      : requireWriteBranch(user, input.branchId);
+      : await requireWriteBranch(user, input.branchId);
+
+    if (branchId) {
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { firmId: true },
+      });
+      if (!branch || branch.firmId !== requireFirmId(user)) {
+        throw new BusinessRuleError("That branch does not belong to your organization");
+      }
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -201,10 +226,11 @@ export async function regenerateAccessCodeAction(
 
     const staff = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { id: true, branchId: true, name: true, role: true },
+      select: { id: true, branchId: true, firmId: true, name: true, role: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     assertBranchAccess(user, staff.branchId);
+    assertFirmAccess(user, staff.firmId);
     assertCanAssignRole(user.role, staff.role);
 
     const accessCode = await generateUniqueAccessCode();
@@ -239,10 +265,11 @@ export async function setPermissionOverrideAction(
 
     const staff = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { id: true, branchId: true, name: true, role: true },
+      select: { id: true, branchId: true, firmId: true, name: true, role: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     assertBranchAccess(user, staff.branchId);
+    assertFirmAccess(user, staff.firmId);
     assertCanAssignRole(user.role, staff.role);
 
     // A manager can never hand out access they do not themselves hold.
@@ -291,10 +318,11 @@ export async function clearPermissionOverrideAction(
 
     const staff = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, branchId: true, name: true },
+      select: { id: true, branchId: true, firmId: true, name: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     assertBranchAccess(user, staff.branchId);
+    assertFirmAccess(user, staff.firmId);
 
     const permission = await prisma.permission.findUnique({
       where: { code: permissionCode },
@@ -327,10 +355,11 @@ export async function markAttendanceAction(payload: unknown): Promise<ActionResu
 
     const staff = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { id: true, branchId: true, name: true },
+      select: { id: true, branchId: true, firmId: true, name: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     assertBranchAccess(user, staff.branchId);
+    assertFirmAccess(user, staff.firmId);
 
     const date = new Date(input.date);
     date.setHours(0, 0, 0, 0);
@@ -387,6 +416,15 @@ export async function applyLeaveAction(payload: unknown): Promise<ActionResult<n
     if (input.userId !== user.id && !hasPermission(user, PERMISSIONS.STAFF_MANAGE)) {
       throw new BusinessRuleError("You can only apply for your own leave");
     }
+    if (input.userId !== user.id) {
+      const target = await prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { branchId: true, firmId: true },
+      });
+      if (!target) throw new NotFoundError("Staff member not found");
+      assertBranchAccess(user, target.branchId);
+      assertFirmAccess(user, target.firmId);
+    }
     if (input.toDate < input.fromDate) {
       throw new BusinessRuleError("The end date cannot be before the start date");
     }
@@ -413,10 +451,11 @@ export async function decideLeaveAction(payload: unknown): Promise<ActionResult<
 
     const leave = await prisma.leave.findUnique({
       where: { id: input.leaveId },
-      include: { user: { select: { id: true, name: true, branchId: true } } },
+      include: { user: { select: { id: true, name: true, branchId: true, firmId: true } } },
     });
     if (!leave) throw new NotFoundError("Leave request not found");
     assertBranchAccess(user, leave.user.branchId);
+    assertFirmAccess(user, leave.user.firmId);
 
     if (leave.status !== "PENDING") {
       throw new BusinessRuleError("This request has already been decided");
@@ -465,10 +504,11 @@ export async function setStaffStatusAction(payload: unknown): Promise<ActionResu
 
     const staff = await prisma.user.findUnique({
       where: { id: staffId },
-      select: { id: true, name: true, status: true, branchId: true, role: true },
+      select: { id: true, name: true, status: true, branchId: true, firmId: true, role: true },
     });
     if (!staff) throw new NotFoundError("Staff member not found");
     if (staff.branchId) assertBranchAccess(actor, staff.branchId);
+    assertFirmAccess(actor, staff.firmId);
 
     if (staff.id === actor.id) {
       throw new BusinessRuleError("You cannot change your own account status");

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { getCategoryCounts } from "@/lib/services/garment-tracking";
 import { categorySlug } from "@/lib/garment-categories";
 import { cn } from "@/lib/utils";
@@ -20,8 +20,9 @@ export default async function TrackingPage() {
     : user.branchId
       ? [user.branchId]
       : [];
+  const firmId = requireFirmId(user);
 
-  const categories = await getCategoryCounts(branchIds);
+  const categories = await getCategoryCounts(firmId, branchIds);
   const onFloor = categories.reduce((sum, row) => sum + row.onFloor, 0);
   const issues = categories.reduce((sum, row) => sum + row.issues, 0);
 

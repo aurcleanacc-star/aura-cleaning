@@ -90,7 +90,7 @@ export async function recordStockMovementAction(
         ? PERMISSIONS.INVENTORY_ADJUST
         : PERMISSIONS.INVENTORY_MANAGE,
     );
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const balance = await prisma.$transaction((tx) =>
       applyStockMovement(tx, {

@@ -31,7 +31,10 @@ export interface FinancialOverviewMetrics {
  * Computes centralized real-time financial metrics from transaction data.
  * No separate formulas or hardcoded numbers — everything rolls up from active ledgers & accounts.
  */
-export async function getFinancialOverview(branchId?: string): Promise<FinancialOverviewMetrics> {
+export async function getFinancialOverview(
+  firmId: string,
+  branchId?: string,
+): Promise<FinancialOverviewMetrics> {
   const today = todayRange();
   const branchWhere = branchId ? { branchId } : {};
 
@@ -47,6 +50,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
   ] = await Promise.all([
     prisma.order.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         status: { notIn: ["CANCELLED", "REFUNDED"] },
       },
@@ -54,33 +58,37 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
     }),
     prisma.expense.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         status: { in: ["APPROVED", "PAID"] },
       },
       _sum: { amount: true },
     }),
     prisma.cashAccount.findFirst({
-      where: branchId ? { branchId } : {},
+      where: { branch: { firmId }, ...(branchId ? { branchId } : {}) },
     }),
     prisma.bankAccount.findMany({
       where: {
+        firmId,
         ...(branchId ? { branchId } : {}),
         status: "ACTIVE",
       },
       select: { currentBalance: true },
     }),
     prisma.customer.aggregate({
-      where: branchId ? { branchId } : {},
+      where: { firmId, ...(branchId ? { branchId } : {}) },
       _sum: { outstandingAmount: true },
     }),
     prisma.purchaseInvoice.findMany({
       where: {
+        supplier: { firmId },
         status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] },
       },
       select: { total: true, amountPaid: true },
     }),
     prisma.payment.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         state: "CAPTURED",
         paidAt: { gte: today.from, lte: today.to },
@@ -89,6 +97,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
     }),
     prisma.financialLedger.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         entryDate: { gte: today.from, lte: today.to },
         debit: { gt: 0 },
@@ -381,6 +390,7 @@ export async function transferCashBank(params: {
 }
 
 export interface LedgerQueryFilters {
+  firmId: string;
   branchId?: string;
   category?: FinancialAccountCategory;
   search?: string;
@@ -415,6 +425,7 @@ export async function listLedgerEntries(filters: LedgerQueryFilters): Promise<{
 
   const entries = await prisma.financialLedger.findMany({
     where: {
+      firmId: filters.firmId,
       ...branchWhere,
       ...(filters.category ? { accountCategory: filters.category } : {}),
       ...(filters.from || filters.to
@@ -581,9 +592,9 @@ export async function getCashAccountSummary(branchId: string) {
   };
 }
 
-export async function listBankAccounts(branchId?: string) {
+export async function listBankAccounts(firmId: string, branchId?: string) {
   const accounts = await prisma.bankAccount.findMany({
-    where: branchId ? { branchId } : {},
+    where: { firmId, ...(branchId ? { branchId } : {}) },
     orderBy: { createdAt: "asc" },
   });
 
@@ -730,13 +741,19 @@ export async function postReconciliation(params: {
 // PROFIT & LOSS REPORT
 // ----------------------------------------------------------------------------
 
-export async function getPnLReport(filters: { branchId?: string; from?: Date; to?: Date }) {
+export async function getPnLReport(filters: {
+  firmId: string;
+  branchId?: string;
+  from?: Date;
+  to?: Date;
+}) {
   const branchWhere = filters.branchId ? { branchId: filters.branchId } : {};
   const dateWhere = filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined;
 
   const [orders, expenses, purchases] = await Promise.all([
     prisma.order.aggregate({
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { notIn: ["CANCELLED", "REFUNDED"] },
         ...(dateWhere ? { placedAt: dateWhere } : {}),
@@ -746,6 +763,7 @@ export async function getPnLReport(filters: { branchId?: string; from?: Date; to
     prisma.expense.groupBy({
       by: ["category"],
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { in: ["APPROVED", "PAID"] },
         ...(dateWhere ? { expenseDate: dateWhere } : {}),
@@ -754,6 +772,7 @@ export async function getPnLReport(filters: { branchId?: string; from?: Date; to
     }),
     prisma.purchaseOrder.aggregate({
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] },
         ...(dateWhere ? { orderDate: dateWhere } : {}),
