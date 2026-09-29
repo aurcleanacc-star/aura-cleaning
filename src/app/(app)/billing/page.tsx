@@ -180,6 +180,7 @@ export default async function BillingPage({
     prisma.refund.aggregate({
       where: {
         status: "PROCESSED",
+        order: { firmId },
         ...(range ? { processedAt: { gte: range.from, lte: range.to } } : {}),
       },
       _sum: { amount: true },

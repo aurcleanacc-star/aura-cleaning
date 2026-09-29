@@ -12,7 +12,7 @@ import { NewAccountDialog } from "@/app/(app)/b2b/b2b-dialogs";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   branchOptions,
@@ -57,11 +57,13 @@ export default async function B2BPage({
 }) {
   const params = await searchParams;
   const user = await requirePermission(PERMISSIONS.B2B_VIEW);
+  const firmId = requireFirmId(user);
 
   const search = param(params, "q");
   const type = param(params, "type");
 
   const where: Prisma.B2BAccountWhereInput = {
+    firmId,
     ...(type && type !== "all" ? { type: type as never } : {}),
     ...(search
       ? {
@@ -86,6 +88,7 @@ export default async function B2BPage({
     branchOptions(user),
     prisma.order.aggregate({
       where: {
+        firmId,
         b2bAccountId: { not: null },
         status: { notIn: ["CANCELLED", "REFUNDED"] },
         placedAt: {

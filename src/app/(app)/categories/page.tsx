@@ -7,21 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS } from "@/lib/rbac";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 
 export const metadata = { title: "Garment & Service Categories" };
 
 export default async function CategoriesPage() {
-  await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
+  const user = await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
+  const firmId = requireFirmId(user);
 
   const [garmentTypes, services] = await Promise.all([
     prisma.garmentType.findMany({
+      where: { firmId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       include: {
         _count: { select: { orderItems: true, garments: true } },
       },
     }),
     prisma.service.findMany({
+      where: { firmId },
       orderBy: { name: "asc" },
       include: {
         _count: { select: { orderItems: true, garments: true } },
