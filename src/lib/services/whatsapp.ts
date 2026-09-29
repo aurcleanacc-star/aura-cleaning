@@ -345,7 +345,13 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     }
   }
 
-  const connectedTokens = [
+  // Exact-match set, not substring matching: rawStatus.includes("connected")
+  // is true for "disconnected" (and .includes("active") is true for
+  // "inactive", .includes("ready") is true for "not_ready"), so a naive
+  // substring check misreports the gateway's own default disconnected state
+  // as connected. Normalize away separators and compare the WHOLE status
+  // string against known exact connected values instead.
+  const connectedStatuses = new Set([
     "ready",
     "connected",
     "paired",
@@ -353,18 +359,15 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     "inchat",
     "islogged",
     "isloggedin",
+    "loggedin",
     "authenticated",
     "online",
-    "active",
-    "success",
     "open",
-    "login",
-    "logged_in",
-    "main",
-  ];
+  ]);
+  const normalizedStatus = rawStatus.replace(/[^a-z0-9]/g, "");
 
   const isActuallyConnected =
-    connectedTokens.some((token) => rawStatus.includes(token)) ||
+    connectedStatuses.has(normalizedStatus) ||
     responseData?.isLoggedIn === true ||
     responseData?.connected === true ||
     responseData?.authenticated === true ||
