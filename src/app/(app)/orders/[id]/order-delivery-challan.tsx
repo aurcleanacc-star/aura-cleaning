@@ -20,8 +20,8 @@ interface ChallanSummary {
   id: string;
   challanNumber: string;
   status: ChallanStatus;
-  grandTotal: unknown;
-  balanceAmount: unknown;
+  grandTotal: number;
+  balanceAmount: number;
 }
 
 interface Props {
@@ -143,10 +143,10 @@ export function OrderDeliveryChallanSection({
               <div>
                 <p className="font-mono text-sm font-semibold">{activeChallan.challanNumber}</p>
                 <p className="mt-0.5 text-muted-foreground">
-                  Total: <span className="font-semibold text-foreground">{formatCurrency(activeChallan.grandTotal as never)}</span>{" "}
+                  Total: <span className="font-semibold text-foreground">{formatCurrency(activeChallan.grandTotal)}</span>{" "}
                   · Balance:{" "}
                   <span className="font-semibold text-warning-foreground">
-                    {formatCurrency(activeChallan.balanceAmount as never)}
+                    {formatCurrency(activeChallan.balanceAmount)}
                   </span>
                 </p>
               </div>

@@ -536,7 +536,13 @@ export default async function OrderDetailPage({
             orderNumber={order.orderNumber}
             customerName={order.customerName}
             customerPhone={order.customerPhone}
-            challans={order.deliveryChallans || []}
+            challans={(order.deliveryChallans || []).map((c) => ({
+              id: c.id,
+              challanNumber: c.challanNumber,
+              status: c.status,
+              grandTotal: num(c.grandTotal),
+              balanceAmount: num(c.balanceAmount),
+            }))}
             canManage={canUpdate}
           />
 
