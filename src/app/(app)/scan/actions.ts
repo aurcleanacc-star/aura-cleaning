@@ -128,20 +128,23 @@ export async function scanUpdateStatusAction(
 
     const required = STAGE_PERMISSION[garment.currentStage] ?? PERMISSIONS.PROCESSING_VIEW;
     const user = await authorize(required);
-    if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
     assertFirmAccess(user, garment.firmId);
+
+    // A firm-wide admin with no fixed branch acts on whichever branch the
+    // garment itself belongs to, same as the scan action above.
+    const actingBranchId = user.branchId ?? garment.branchId;
 
     const result = await advanceGarment({
       garmentId: garment.id,
       stage: garment.currentStage,
       outcome: "COMPLETED",
       scannedVia: "scan-workspace",
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: garment.firmId },
+      actor: { userId: user.id, userName: user.name, branchId: actingBranchId, firmId: garment.firmId },
     });
 
     await recordAudit({
       userId: user.id,
-      branchId: user.branchId,
+      branchId: actingBranchId,
       action: "GARMENT_STAGE_ADVANCED",
       entity: "Garment",
       entityId: garment.id,

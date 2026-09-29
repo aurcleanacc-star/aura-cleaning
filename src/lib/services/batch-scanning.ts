@@ -35,7 +35,10 @@ export interface ValidateBatchScanParams {
   contextCustomerId?: string | null;
   autoAdvance?: boolean;
   alreadyScannedCodes?: string[];
-  branchId: string;
+  /** Null for a firm-wide operator with no fixed branch — scoped to the
+   *  whole firm instead of one branch, same as the main scan workspace. */
+  branchIds: string[] | null;
+  firmId: string;
   userId: string;
 }
 
@@ -80,11 +83,14 @@ export async function validateBatchScan(params: ValidateBatchScanParams): Promis
   }
 
   const parsed = parseScan(code);
+  const branchWhere = params.branchIds
+    ? { branchId: { in: params.branchIds }, firmId: params.firmId }
+    : { firmId: params.firmId };
 
   // 1. Find garment by garmentCode, barcodeValue, qrPayload, or order number
   let garment = await prisma.garment.findFirst({
     where: {
-      branchId: params.branchId,
+      ...branchWhere,
       OR: [
         { garmentCode: parsed.value },
         { barcodeValue: parsed.value },
@@ -107,7 +113,7 @@ export async function validateBatchScan(params: ValidateBatchScanParams): Promis
 
   if (!garment && (parsed.kind === "order" || parsed.kind === "unknown")) {
     const order = await prisma.order.findFirst({
-      where: { branchId: params.branchId, orderNumber: { equals: parsed.value, mode: "insensitive" } },
+      where: { ...branchWhere, orderNumber: { equals: parsed.value, mode: "insensitive" } },
       select: { id: true },
     });
     if (order) {
@@ -272,11 +278,13 @@ export async function validateBatchScan(params: ValidateBatchScanParams): Promis
   }
 
   // 4. Clean MATCHED scan logic
-  // Record scan in GarmentScan ledger
+  // Record scan in GarmentScan ledger, attributed to the garment's own
+  // branch — correct whether the operator is scoped to one branch or, for
+  // a firm-wide admin, acting across all of them.
   await recordGarmentScan(prisma, {
     garmentId: garment.id,
     stage: operationStage ?? garment.currentStage,
-    branchId: params.branchId,
+    branchId: garment.branchId,
     userId: params.userId,
     contextOrderId: params.contextOrderId ?? garment.orderId,
     note: params.operation ? `Batch scan (${params.operation})` : "Batch scan",
@@ -295,7 +303,7 @@ export async function validateBatchScan(params: ValidateBatchScanParams): Promis
           stage: stageConfig.stage,
           outcome: "COMPLETED",
           scannedVia: `batch-${params.operation.toLowerCase()}`,
-          actor: { userId: params.userId, userName: "Batch Scanner", branchId: params.branchId, firmId: garment.firmId },
+          actor: { userId: params.userId, userName: "Batch Scanner", branchId: garment.branchId, firmId: garment.firmId },
         });
         currentStatus = advResult.status;
         if (advResult.nextStage) currentStage = advResult.nextStage;
@@ -346,13 +354,18 @@ export interface ExpectedGarment {
 export async function fetchExpectedGarments(params: {
   orderId?: string | null;
   customerId?: string | null;
-  branchId: string;
+  branchIds: string[] | null;
+  firmId: string;
 }): Promise<ExpectedGarment[]> {
   if (!params.orderId && !params.customerId) return [];
 
+  const branchWhere = params.branchIds
+    ? { branchId: { in: params.branchIds }, firmId: params.firmId }
+    : { firmId: params.firmId };
+
   const garments = await prisma.garment.findMany({
     where: {
-      branchId: params.branchId,
+      ...branchWhere,
       ...(params.orderId ? { orderId: params.orderId } : {}),
       ...(params.customerId ? { order: { customerId: params.customerId } } : {}),
       status: { notIn: ["DELIVERED", "LOST", "DAMAGED", "RETURNED"] },

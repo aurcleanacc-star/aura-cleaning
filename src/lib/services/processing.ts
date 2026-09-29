@@ -72,6 +72,7 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
     });
 
     if (!garment) throw new NotFoundError("Garment not found");
+    if (garment.firmId !== input.actor.firmId) throw new NotFoundError("Garment not found");
     if (garment.branchId !== input.actor.branchId) {
       throw new BusinessRuleError(
         "This garment belongs to another branch and cannot be processed here",

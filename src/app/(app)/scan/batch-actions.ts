@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { authorize } from "@/lib/session";
+import { authorize, hasPermission, requireFirmId } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { runAction, type ActionResult, BusinessRuleError } from "@/lib/action-result";
 import { recordAudit } from "@/lib/audit";
@@ -26,7 +26,10 @@ export async function batchScanGarmentAction(
 ): Promise<ActionResult<BatchScanItemResult>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.GARMENT_SCAN);
-    if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
+    const hasAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
+    if (!user.branchId && !hasAllBranches) {
+      throw new BusinessRuleError("Your account is not assigned to a branch");
+    }
 
     const input = batchScanSchema.parse(payload);
 
@@ -37,7 +40,8 @@ export async function batchScanGarmentAction(
       contextCustomerId: input.contextCustomerId,
       autoAdvance: input.autoAdvance,
       alreadyScannedCodes: input.alreadyScannedCodes,
-      branchId: user.branchId,
+      branchIds: hasAllBranches ? null : [user.branchId!],
+      firmId: requireFirmId(user),
       userId: user.id,
     });
 
@@ -45,6 +49,7 @@ export async function batchScanGarmentAction(
       await recordAudit({
         userId: user.id,
         branchId: user.branchId,
+        firmId: requireFirmId(user),
         action: "BATCH_SCAN_EXCEPTION",
         entity: "BatchScan",
         summary: `Batch scan exception [${result.outcome}]: ${input.code} — ${result.message}`,
@@ -65,13 +70,17 @@ export async function fetchBatchExpectedGarmentsAction(
 ): Promise<ActionResult<ExpectedGarment[]>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.GARMENT_SCAN);
-    if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
+    const hasAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
+    if (!user.branchId && !hasAllBranches) {
+      throw new BusinessRuleError("Your account is not assigned to a branch");
+    }
 
     const input = fetchExpectedSchema.parse(payload ?? {});
     return fetchExpectedGarments({
       orderId: input.orderId,
       customerId: input.customerId,
-      branchId: user.branchId,
+      branchIds: hasAllBranches ? null : [user.branchId!],
+      firmId: requireFirmId(user),
     });
   });
 }

@@ -50,9 +50,25 @@ export async function advanceGarmentAction(
     const input = advanceStageSchema.parse(payload);
     const required = STAGE_PERMISSION[input.stage] ?? PERMISSIONS.PROCESSING_VIEW;
     const user = await authorize(required);
+    const firmId = requireFirmId(user);
+    const hasAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
 
-    if (!user.branchId) {
+    if (!user.branchId && !hasAllBranches) {
       throw new BusinessRuleError("Your account is not assigned to a branch");
+    }
+
+    // A firm-wide admin with no fixed branch acts on whichever branch the
+    // garment itself belongs to — verified against their own firm first,
+    // since advanceGarment's own branch check can't do that for them.
+    let actingBranchId = user.branchId;
+    if (!actingBranchId) {
+      const garment = await prisma.garment.findUnique({
+        where: { id: input.garmentId },
+        select: { branchId: true, firmId: true },
+      });
+      if (!garment) throw new NotFoundError("Garment not found");
+      assertFirmAccess(user, garment.firmId);
+      actingBranchId = garment.branchId;
     }
 
     const result = await advanceGarment({
@@ -62,12 +78,12 @@ export async function advanceGarmentAction(
       note: input.note ?? null,
       scannedVia: input.scannedVia ?? "manual",
       contextOrderId: input.contextOrderId ?? null,
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: requireFirmId(user) },
+      actor: { userId: user.id, userName: user.name, branchId: actingBranchId, firmId },
     });
 
     await recordAudit({
       userId: user.id,
-      branchId: user.branchId,
+      branchId: actingBranchId,
       action: "GARMENT_STAGE_ADVANCED",
       entity: "Garment",
       entityId: input.garmentId,
@@ -93,12 +109,27 @@ export async function bulkAdvanceAction(
     const input = bulkAdvanceSchema.parse(payload);
     const required = STAGE_PERMISSION[input.stage] ?? PERMISSIONS.PROCESSING_VIEW;
     const user = await authorize(required);
+    const firmId = requireFirmId(user);
+    const hasAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
 
-    if (!user.branchId) {
+    if (!user.branchId && !hasAllBranches) {
       throw new BusinessRuleError("Your account is not assigned to a branch");
     }
     if (input.garmentIds.length > 300) {
       throw new BusinessRuleError("Process at most 300 garments at a time");
+    }
+
+    // A firm-wide admin with no fixed branch acts on whichever branch the
+    // selected garments belong to (advanceGarment's own per-item firmId
+    // check still protects each one individually inside advanceMany).
+    let actingBranchId = user.branchId;
+    if (!actingBranchId) {
+      const first = await prisma.garment.findFirst({
+        where: { id: { in: input.garmentIds } },
+        select: { branchId: true },
+      });
+      if (!first) throw new NotFoundError("Garment not found");
+      actingBranchId = first.branchId;
     }
 
     const { succeeded, failed } = await advanceMany(input.garmentIds, {
@@ -106,12 +137,12 @@ export async function bulkAdvanceAction(
       outcome: input.outcome,
       note: input.note ?? null,
       scannedVia: "bulk",
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: requireFirmId(user) },
+      actor: { userId: user.id, userName: user.name, branchId: actingBranchId, firmId },
     });
 
     await recordAudit({
       userId: user.id,
-      branchId: user.branchId,
+      branchId: actingBranchId,
       action: "GARMENT_BULK_ADVANCED",
       entity: "ProcessingTask",
       summary: `${succeeded.length} garments → ${input.outcome} at ${input.stage}${failed.length ? ` (${failed.length} failed)` : ""}`,
