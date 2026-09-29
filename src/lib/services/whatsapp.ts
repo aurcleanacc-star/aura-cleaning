@@ -698,6 +698,14 @@ export async function getWhatsAppHistory(params: {
   orderId?: string;
   take?: number;
 }) {
+  // WhatsAppLog has no firmId column of its own, so it can only be scoped
+  // through a customer or order the caller has already verified belongs to
+  // its own firm — never called with neither, which would return every
+  // firm's message history unfiltered.
+  if (!params.customerId && !params.orderId) {
+    throw new Error("getWhatsAppHistory requires a customerId or orderId to scope by");
+  }
+
   return prisma.whatsAppLog.findMany({
     where: {
       ...(params.customerId ? { customerId: params.customerId } : {}),
