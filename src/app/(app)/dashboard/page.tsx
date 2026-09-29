@@ -78,6 +78,7 @@ export default async function DashboardPage({
   const status = param(params, "status");
 
   const filters = {
+    firmId,
     branchId,
     range,
     serviceId: serviceId && serviceId !== "all" ? serviceId : undefined,
@@ -134,7 +135,7 @@ export default async function DashboardPage({
         outstandingAmount: true,
       },
     }),
-    canSeeAllBranches ? branchPerformance(range) : Promise.resolve([]),
+    canSeeAllBranches ? branchPerformance(firmId, range) : Promise.resolve([]),
     detectMismatches({ firmId, branchIds: branchId ? [branchId] : null }),
     canSeeMoney ? getFinancialOverview(firmId, branchId) : Promise.resolve(null),
   ]);

@@ -51,7 +51,7 @@ export default async function ReportsPage({
     to: new Date(),
   };
   const tab = param(params, "tab") ?? "sales";
-  const filters = { branchId, range };
+  const filters = { firmId, branchId, range };
 
   const canSales = hasPermission(user, PERMISSIONS.REPORT_SALES);
   const canOps = hasPermission(user, PERMISSIONS.REPORT_OPERATIONS);
@@ -76,7 +76,7 @@ export default async function ReportsPage({
     canSales ? revenueSeries(filters) : Promise.resolve([]),
     canSales ? servicePerformance(filters) : Promise.resolve([]),
     hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
-      ? branchPerformance(range)
+      ? branchPerformance(firmId, range)
       : Promise.resolve([]),
     canOps ? operationsMetrics(filters) : Promise.resolve(null),
     canOps ? deliveryMetrics(filters) : Promise.resolve(null),
