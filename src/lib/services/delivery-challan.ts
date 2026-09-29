@@ -104,6 +104,7 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
         challanNumber,
         orderId: order.id,
         branchId: order.branchId,
+        firmId: order.firmId,
         customerId: order.customerId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
@@ -376,6 +377,7 @@ export async function updateChallanStatus(
         data: {
           paymentNumber,
           branchId: challan.branchId,
+          firmId: challan.firmId,
           orderId: challan.orderId,
           amount: paymentAmount,
           method: paymentMethod || "CASH",

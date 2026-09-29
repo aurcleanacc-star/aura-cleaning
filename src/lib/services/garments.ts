@@ -33,6 +33,7 @@ export interface ActorContext {
   userId: string;
   userName: string;
   branchId: string;
+  firmId: string;
 }
 
 /**
@@ -80,6 +81,7 @@ export async function createGarments(
         trackingCategory: seed.trackingCategory,
         serviceId: seed.serviceId,
         branchId: params.branchId,
+        firmId: params.actor.firmId,
         status: "RECEIVED",
         currentStage: "RECEIVING",
         color: seed.color ?? null,

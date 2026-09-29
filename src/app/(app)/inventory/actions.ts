@@ -7,7 +7,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -30,6 +32,12 @@ export async function saveInventoryItemAction(
     const user = await authorize(PERMISSIONS.INVENTORY_MANAGE);
     const input = inventoryItemSchema.parse(payload);
 
+    if (input.id) {
+      const existing = await prisma.inventoryItem.findUnique({ where: { id: input.id }, select: { firmId: true } });
+      if (!existing) throw new NotFoundError("Inventory item not found");
+      assertFirmAccess(user, existing.firmId);
+    }
+
     const item = input.id
       ? await prisma.inventoryItem.update({
           where: { id: input.id },
@@ -48,6 +56,7 @@ export async function saveInventoryItemAction(
           data: {
             sku: input.sku,
             name: input.name,
+            firmId: requireFirmId(user),
             category: input.category,
             unit: input.unit,
             description: input.description ?? null,

@@ -28,6 +28,22 @@ if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
+/** Matches the fixed default-firm id created by the multi-tenant migration. */
+const FIRM_ID = "firm_aurclean_falnir";
+
+async function seedFirm() {
+  await prisma.firm.upsert({
+    where: { id: FIRM_ID },
+    create: {
+      id: FIRM_ID,
+      code: "FALNIR",
+      name: "Aurclean - Falnir",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic pseudo-randomness, so repeated seeds produce comparable data.
 // ---------------------------------------------------------------------------
@@ -173,8 +189,8 @@ async function seedSettings() {
 
   for (const setting of settings) {
     await prisma.setting.upsert({
-      where: { key: setting.key },
-      create: setting,
+      where: { firmId_key: { firmId: FIRM_ID, key: setting.key } },
+      create: { ...setting, firmId: FIRM_ID },
       update: {},
     });
   }
@@ -182,8 +198,9 @@ async function seedSettings() {
 
 async function seedBranches() {
   const headOffice = await prisma.branch.upsert({
-    where: { code: "HO" },
+    where: { firmId_code: { firmId: FIRM_ID, code: "HO" } },
     create: {
+      firmId: FIRM_ID,
       code: "HO",
       name: "Aura Head Office",
       type: "HEAD_OFFICE",
@@ -230,9 +247,10 @@ async function seedBranches() {
   const branches = await Promise.all(
     children.map((child) =>
       prisma.branch.upsert({
-        where: { code: child.code },
+        where: { firmId_code: { firmId: FIRM_ID, code: child.code } },
         create: {
           ...child,
+          firmId: FIRM_ID,
           parentId: headOffice.id,
           city: "Bengaluru",
           state: "Karnataka",
@@ -564,8 +582,8 @@ async function seedCatalogue() {
   const createdServices = await Promise.all(
     services.map((service) =>
       prisma.service.upsert({
-        where: { code: service.code },
-        create: service,
+        where: { firmId_code: { firmId: FIRM_ID, code: service.code } },
+        create: { ...service, firmId: FIRM_ID },
         update: { basePrice: service.basePrice, stages: service.stages },
       }),
     ),
@@ -574,8 +592,8 @@ async function seedCatalogue() {
   const createdTypes = await Promise.all(
     garmentTypes.map((type) =>
       prisma.garmentType.upsert({
-        where: { code: type.code },
-        create: type,
+        where: { firmId_code: { firmId: FIRM_ID, code: type.code } },
+        create: { ...type, firmId: FIRM_ID },
         update: { trackingCategory: type.trackingCategory },
       }),
     ),
@@ -626,8 +644,8 @@ async function seedInventory(branchIds: string[]) {
   const created = await Promise.all(
     items.map((item) =>
       prisma.inventoryItem.upsert({
-        where: { sku: item.sku },
-        create: item,
+        where: { firmId_sku: { firmId: FIRM_ID, sku: item.sku } },
+        create: { ...item, firmId: FIRM_ID },
         update: {},
       }),
     ),
@@ -699,8 +717,8 @@ async function seedSuppliers(
       },
     ].map((supplier) =>
       prisma.supplier.upsert({
-        where: { code: supplier.code },
-        create: supplier,
+        where: { firmId_code: { firmId: FIRM_ID, code: supplier.code } },
+        create: { ...supplier, firmId: FIRM_ID },
         update: {},
       }),
     ),
@@ -728,6 +746,7 @@ async function seedSuppliers(
       poNumber: "PO00001",
       supplierId: suppliers[0].id,
       branchId,
+      firmId: FIRM_ID,
       status: "RECEIVED",
       orderDate: daysAgo(20),
       expectedDate: daysAgo(14),
@@ -810,6 +829,7 @@ async function seedSuppliers(
       poNumber: "PO00002",
       supplierId: suppliers[1].id,
       branchId,
+      firmId: FIRM_ID,
       status: "SENT",
       orderDate: daysAgo(3),
       expectedDate: daysAgo(-4),
@@ -891,7 +911,7 @@ async function seedB2B(
     accounts.map((account) =>
       prisma.b2BAccount.upsert({
         where: { code: account.code },
-        create: { ...account, branchId },
+        create: { ...account, branchId, firmId: FIRM_ID },
         update: {},
       }),
     ),
@@ -1274,6 +1294,7 @@ async function seedOrders(context: {
         data: {
           code: `CUS${10000 + customerCounter}`,
           branchId: branch.id,
+          firmId: FIRM_ID,
           name,
           phone: phone().replace(/\D/g, "").slice(-10),
           email:
@@ -1375,6 +1396,7 @@ async function seedOrders(context: {
           data: {
             code: `CUS${10000 + (customerCounter += 1)}`,
             branchId: branch.id,
+            firmId: FIRM_ID,
             name: account.businessName,
             phone: account.phone.replace(/\D/g, "").slice(-10),
             addressLine: `${randomInt(1, 400)}, ${randomInt(1, 12)}th Cross, ${pick(AREAS)}`,
@@ -1403,6 +1425,7 @@ async function seedOrders(context: {
       data: {
         orderNumber: `ORD${10000 + orderCounter}`,
         branchId: branch.id,
+        firmId: FIRM_ID,
         type: orderType,
         priority: random() < 0.15 ? "EXPRESS" : "NORMAL",
         status: "RECEIVED",
@@ -1471,6 +1494,7 @@ async function seedOrders(context: {
         type: "ORDER",
         status: paid >= totalAmount ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "ISSUED",
         branchId: branch.id,
+        firmId: FIRM_ID,
         orderId: order.id,
         b2bAccountId: account?.id ?? null,
         billToName: customerName,
@@ -1508,6 +1532,7 @@ async function seedOrders(context: {
         data: {
           paymentNumber: `PAY${String(paymentCounter).padStart(6, "0")}`,
           branchId: branch.id,
+          firmId: FIRM_ID,
           orderId: order.id,
           amount: paid,
           method: pick(["CASH", "UPI", "CARD", "ONLINE"] as const),
@@ -1688,6 +1713,7 @@ async function seedOrders(context: {
             garmentCode: code,
             qrPayload: `AURA:G:${code}`,
             barcodeValue: code,
+            firmId: FIRM_ID,
             orderId: order.id,
             orderItemId: item.id,
             garmentTypeId: item.garmentTypeId,
@@ -1821,6 +1847,7 @@ async function seedOrders(context: {
           deliveryNumber: `DLV${String(deliveryCounter).padStart(6, "0")}`,
           orderId: order.id,
           branchId: branch.id,
+          firmId: FIRM_ID,
           status: plan.progress === "delivered" ? "DELIVERED" : "DRIVER_ASSIGNED",
           driverId: driver.id,
           scheduledAt: hoursFrom(placedAt, turnaround),
@@ -1969,6 +1996,7 @@ async function seedComplaints(
         priority: sample.priority,
         status: sample.status,
         branchId: order.branchId,
+        firmId: FIRM_ID,
         orderId: order.id,
         garmentId: garment?.id ?? null,
         raisedByName: orderRecord?.customerName ?? fullName(),
@@ -2023,6 +2051,7 @@ async function seedExpensesAndAttendance(
         data: {
           expenseNumber: `EXP${String(expenseCounter).padStart(5, "0")}`,
           branchId: branch.id,
+          firmId: FIRM_ID,
           category,
           status: expenseCounter % 5 === 0 ? "PENDING" : "APPROVED",
           amount: round2(amount * (0.85 + random() * 0.3)),
@@ -2092,6 +2121,9 @@ async function main() {
 
   console.log("Clearing transactional data…");
   await clearTransactionalData();
+
+  console.log("Firm…");
+  await seedFirm();
 
   console.log("Permissions…");
   await seedPermissions();

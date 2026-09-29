@@ -22,6 +22,7 @@ import type { DocumentType } from "@/lib/pdf/types";
 export type { DocumentType };
 
 export interface SendDocumentWhatsAppParams {
+  firmId: string;
   documentType: DocumentType;
   documentId: string;
   phone?: string; // Optional override; defaults to customer phone
@@ -39,14 +40,14 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
   fileName: string;
   status: string;
 }> {
-  const { documentType, documentId, phone, sentByUserId, customCaption } = params;
+  const { firmId, documentType, documentId, phone, sentByUserId, customCaption } = params;
 
   // Fail fast, before spending time generating a PDF nobody can receive yet.
   // sendWhatsAppMessage() re-checks this immediately before its own send
   // attempt too — session state can change in the seconds it takes to
   // render a large document — but there is no reason to build the PDF at
   // all when the gateway is already known to be down.
-  const waStatus = await getWhatsAppStatus({ forceRefresh: true });
+  const waStatus = await getWhatsAppStatus(firmId, { forceRefresh: true });
   if (!waStatus.connected || waStatus.status !== "ready") {
     throw new Error(
       `WhatsApp Gateway is disconnected (Current status: ${waStatus.status}). Please check OpenWA in Settings -> WhatsApp.`,
@@ -72,6 +73,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         include: { order: true, customer: true },
       });
       if (!invoice) throw new Error("Invoice record not found.");
+      if (invoice.firmId !== firmId) throw new Error("Invoice record not found.");
       targetPhone = targetPhone || invoice.billToPhone || invoice.customer?.phone || "";
       customerId = invoice.customerId;
       orderId = invoice.orderId;
@@ -88,6 +90,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         include: { order: true, customer: true, items: true },
       });
       if (!challan) throw new Error("Delivery Challan record not found.");
+      if (challan.firmId !== firmId) throw new Error("Delivery Challan record not found.");
       targetPhone = targetPhone || challan.customerPhone || challan.customer?.phone || "";
       customerId = challan.customerId;
       orderId = challan.orderId;
@@ -103,6 +106,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         include: { order: { include: { customer: true } } },
       });
       if (!payment) throw new Error("Payment record not found.");
+      if (payment.firmId !== firmId) throw new Error("Payment record not found.");
       targetPhone = targetPhone || payment.order?.customerPhone || "";
       customerId = payment.order?.customerId || null;
       orderId = payment.orderId;
@@ -118,6 +122,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         include: { order: true },
       });
       if (!delivery) throw new Error("Delivery record not found.");
+      if (delivery.firmId !== firmId) throw new Error("Delivery record not found.");
       targetPhone = targetPhone || delivery.contactPhone || "";
       customerId = delivery.order.customerId;
       orderId = delivery.orderId;
@@ -133,6 +138,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         include: { customer: true },
       });
       if (!order) throw new Error("Order record not found.");
+      if (order.firmId !== firmId) throw new Error("Order record not found.");
       targetPhone = targetPhone || order.customerPhone || "";
       customerId = order.customerId;
       orderId = order.id;
@@ -147,6 +153,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
         where: { id: documentId },
       });
       if (!customer) throw new Error("Customer record not found.");
+      if (customer.firmId !== firmId) throw new Error("Customer record not found.");
       targetPhone = targetPhone || customer.phone || "";
       customerId = customer.id;
       messageType = "CUSTOM";
@@ -158,6 +165,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
       pdfResult = await generateExpenseReceiptPDF(documentId);
       const expense = await prisma.expense.findUnique({ where: { id: documentId } });
       if (!expense) throw new Error("Expense record not found.");
+      if (expense.firmId !== firmId) throw new Error("Expense record not found.");
       targetPhone = targetPhone || "";
       messageType = "CUSTOM";
       defaultCaption = `Expense Voucher #${expense.expenseNumber} attached. Amount: ₹${Number(expense.amount)}`;
@@ -181,6 +189,7 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
   const caption = customCaption || defaultCaption;
 
   const result = await sendWhatsAppMessage({
+    firmId,
     phone: formattedPhone,
     messageType,
     messageText: caption,

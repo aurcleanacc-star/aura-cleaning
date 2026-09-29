@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { getWhatsAppStatus } from "@/lib/services/whatsapp";
 
@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 
-    const statusData = await getWhatsAppStatus({ forceRefresh });
+    const statusData = await getWhatsAppStatus(requireFirmId(user), { forceRefresh });
     return NextResponse.json(statusData);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to query WhatsApp status";

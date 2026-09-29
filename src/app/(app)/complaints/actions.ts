@@ -7,7 +7,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -42,9 +44,10 @@ export async function createComplaintAction(
     if (input.orderId) {
       const order = await prisma.order.findUnique({
         where: { id: input.orderId },
-        select: { branchId: true },
+        select: { branchId: true, firmId: true },
       });
       if (!order) throw new NotFoundError("Order not found");
+      assertFirmAccess(user, order.firmId);
       assertBranchAccess(user, order.branchId);
     }
 
@@ -52,6 +55,7 @@ export async function createComplaintAction(
       data: {
         complaintNumber: await nextComplaintNumber(),
         branchId,
+        firmId: requireFirmId(user),
         type: input.type,
         priority: input.priority,
         status: "OPEN",

@@ -7,7 +7,7 @@ import { revalidateOperational } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS, STAGE_PERMISSION } from "@/lib/rbac";
-import { authorize, hasPermission } from "@/lib/session";
+import { assertFirmAccess, authorize, hasPermission, requireFirmId } from "@/lib/session";
 import {
   BusinessRuleError,
   NotFoundError,
@@ -66,6 +66,7 @@ export async function scanGarmentAction(payload: unknown): Promise<ActionResult<
 
     await logScan({
       branchId: user.branchId,
+      firmId: requireFirmId(user),
       rawCode: input.code,
       result,
       source: input.source,
@@ -117,20 +118,21 @@ export async function scanUpdateStatusAction(
 
     const garment = await prisma.garment.findUnique({
       where: { id: input.garmentId },
-      select: { id: true, garmentCode: true, currentStage: true, branchId: true },
+      select: { id: true, garmentCode: true, currentStage: true, branchId: true, firmId: true },
     });
     if (!garment) throw new NotFoundError("Garment not found");
 
     const required = STAGE_PERMISSION[garment.currentStage] ?? PERMISSIONS.PROCESSING_VIEW;
     const user = await authorize(required);
     if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
+    assertFirmAccess(user, garment.firmId);
 
     const result = await advanceGarment({
       garmentId: garment.id,
       stage: garment.currentStage,
       outcome: "COMPLETED",
       scannedVia: "scan-workspace",
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId },
+      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: garment.firmId },
     });
 
     await recordAudit({

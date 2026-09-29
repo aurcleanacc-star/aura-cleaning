@@ -12,6 +12,10 @@ declare module "next-auth" {
       branchCode: string | null;
       employeeCode: string | null;
       permissions: PermissionCode[];
+      firmId: string | null;
+      firmName: string | null;
+      activeFirmId: string | null;
+      activeFirmName: string | null;
     } & DefaultSession["user"];
   }
 
@@ -22,6 +26,10 @@ declare module "next-auth" {
     branchCode?: string | null;
     employeeCode?: string | null;
     permissions: PermissionCode[];
+    firmId: string | null;
+    firmName?: string | null;
+    activeFirmId: string | null;
+    activeFirmName?: string | null;
   }
 }
 
@@ -34,5 +42,9 @@ declare module "next-auth/jwt" {
     branchCode: string | null;
     employeeCode: string | null;
     permissions: PermissionCode[];
+    firmId: string | null;
+    firmName: string | null;
+    activeFirmId: string | null;
+    activeFirmName: string | null;
   }
 }

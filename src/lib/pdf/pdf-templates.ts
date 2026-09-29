@@ -65,7 +65,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
 
   if (!invoice) throw new Error(`Invoice #${invoiceId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(invoice.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(invoice.branch));
@@ -202,7 +202,7 @@ export async function generateChallanPDF(challanId: string): Promise<{ buffer: B
 
   if (!challan) throw new Error(`Delivery Challan #${challanId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(challan.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(challan.branch));
@@ -296,7 +296,7 @@ export async function generatePaymentReceiptPDF(paymentId: string): Promise<{ bu
 
   if (!payment) throw new Error(`Payment #${paymentId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(payment.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(payment.branch));
@@ -374,7 +374,7 @@ export async function generateDeliveryReceiptPDF(deliveryId: string): Promise<{ 
 
   if (!delivery) throw new Error(`Delivery #${deliveryId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(delivery.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(delivery.branch));
@@ -453,7 +453,7 @@ export async function generateOrderSummaryPDF(orderId: string): Promise<{ buffer
 
   if (!order) throw new Error(`Order #${orderId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(order.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(order.branch));
@@ -552,7 +552,7 @@ export async function generateStatementPDF(customerId: string): Promise<{ buffer
 
   if (!customer) throw new Error(`Customer #${customerId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(customer.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   const statementNo = `STM-${customer.code}-${Date.now().toString().slice(-4)}`;
@@ -624,7 +624,7 @@ export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ bu
 
   if (!expense) throw new Error(`Expense #${expenseId} not found.`);
 
-  const company = await getCompanyProfile();
+  const company = await getCompanyProfile(expense.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(expense.branch));

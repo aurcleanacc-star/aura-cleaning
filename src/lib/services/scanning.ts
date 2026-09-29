@@ -441,6 +441,7 @@ export async function resolveGarmentScan(params: {
 
 export async function logScan(params: {
   branchId: string;
+  firmId: string;
   rawCode: string;
   result: ScanResult;
   source: ScanSource;
@@ -453,6 +454,7 @@ export async function logScan(params: {
   await prisma.scanEvent.create({
     data: {
       branchId: params.branchId,
+      firmId: params.firmId,
       rawCode: params.rawCode.slice(0, 200),
       resolvedAs: garmentCode ? "GARMENT" : "UNKNOWN",
       orderId,

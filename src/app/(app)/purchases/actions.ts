@@ -8,7 +8,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -41,6 +43,15 @@ export async function saveSupplierAction(
     const user = await authorize(PERMISSIONS.PURCHASE_MANAGE);
     const input = supplierSchema.parse(payload);
 
+    if (input.id) {
+      const existing = await prisma.supplier.findUnique({
+        where: { id: input.id },
+        select: { firmId: true },
+      });
+      if (!existing) throw new NotFoundError("Supplier not found");
+      assertFirmAccess(user, existing.firmId);
+    }
+
     const supplier = input.id
       ? await prisma.supplier.update({
           where: { id: input.id },
@@ -61,6 +72,7 @@ export async function saveSupplierAction(
           data: {
             code: input.code,
             name: input.name,
+            firmId: requireFirmId(user),
             contactPerson: input.contactPerson ?? null,
             phone: input.phone ?? null,
             email: input.email ?? null,
@@ -96,9 +108,10 @@ export async function createPurchaseOrderAction(
 
     const supplier = await prisma.supplier.findUnique({
       where: { id: input.supplierId },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, firmId: true, name: true, isActive: true },
     });
     if (!supplier) throw new NotFoundError("Supplier not found");
+    assertFirmAccess(user, supplier.firmId);
     if (!supplier.isActive) throw new BusinessRuleError(`${supplier.name} is not active`);
 
     const lines = input.items.map((item) => {
@@ -115,6 +128,7 @@ export async function createPurchaseOrderAction(
         poNumber: await nextPurchaseOrderNumber(),
         supplierId: supplier.id,
         branchId,
+        firmId: supplier.firmId,
         status: "SENT",
         orderDate: input.orderDate,
         expectedDate: input.expectedDate,
@@ -167,6 +181,7 @@ export async function receiveGoodsAction(
     });
     if (!po) throw new NotFoundError("Purchase order not found");
     assertBranchAccess(user, po.branchId);
+    assertFirmAccess(user, po.firmId);
     if (["CANCELLED", "CLOSED"].includes(po.status)) {
       throw new BusinessRuleError("This purchase order is closed");
     }
@@ -299,9 +314,10 @@ export async function recordSupplierPaymentAction(
 
     const supplier = await prisma.supplier.findUnique({
       where: { id: input.supplierId },
-      select: { id: true, name: true },
+      select: { id: true, firmId: true, name: true },
     });
     if (!supplier) throw new NotFoundError("Supplier not found");
+    assertFirmAccess(user, supplier.firmId);
 
     if (input.invoiceId) {
       const invoice = await prisma.purchaseInvoice.findUnique({
@@ -441,10 +457,11 @@ export async function cancelPurchaseOrderAction(
 
     const po = await prisma.purchaseOrder.findUnique({
       where: { id: poId },
-      select: { id: true, branchId: true, poNumber: true, status: true },
+      select: { id: true, branchId: true, firmId: true, poNumber: true, status: true },
     });
     if (!po) throw new NotFoundError("Purchase order not found");
     assertBranchAccess(user, po.branchId);
+    assertFirmAccess(user, po.firmId);
     if (["RECEIVED", "CANCELLED"].includes(po.status)) {
       throw new BusinessRuleError("This purchase order can no longer be cancelled");
     }
@@ -485,12 +502,14 @@ export async function archiveSupplierAction(
       where: { id },
       select: {
         id: true,
+        firmId: true,
         name: true,
         isActive: true,
         _count: { select: { purchaseOrders: true, payments: true } },
       },
     });
     if (!supplier) throw new NotFoundError("Supplier not found");
+    assertFirmAccess(user, supplier.firmId);
 
     if (supplier._count.purchaseOrders + supplier._count.payments > 0) {
       if (!supplier.isActive) {

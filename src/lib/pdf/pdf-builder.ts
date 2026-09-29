@@ -42,9 +42,18 @@ export interface BranchProfile {
   email?: string | null;
 }
 
-export async function getCompanyProfile(): Promise<CompanyProfile> {
+/**
+ * Every PDF must reflect only the firm it was generated for — never
+ * whichever firm's settings happened to be read first. Callers always pass
+ * the firmId straight from the record the document is for (invoice.firmId,
+ * challan.firmId, ...), never from the viewing user's session, so a
+ * PLATFORM_ADMIN previewing across firms can never leak one firm's branding
+ * onto another firm's document.
+ */
+export async function getCompanyProfile(firmId: string): Promise<CompanyProfile> {
   const settings = await prisma.setting.findMany({
     where: {
+      firmId,
       category: { in: ["company", "documents", "general"] },
     },
   });

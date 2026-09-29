@@ -35,6 +35,7 @@ export async function upsertCustomer(
   tx: Db,
   params: {
     branchId: string;
+    firmId: string;
     details: CustomerDetails;
     createdById?: string | null;
   },
@@ -77,6 +78,7 @@ export async function upsertCustomer(
     data: {
       code: await nextCustomerCode(tx),
       branchId: params.branchId,
+      firmId: params.firmId,
       phone,
       ...contact,
       notes: params.details.notes?.trim() || null,

@@ -27,7 +27,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime, formatTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   GARMENT_STATUS_LABELS,
@@ -91,10 +91,11 @@ export default async function OrderDetailPage({
   });
 
   if (!order) notFound();
+  assertFirmAccess(user, order.firmId);
   assertBranchAccess(user, order.branchId);
 
   const deliveryPolicy = await prisma.setting.findUnique({
-    where: { key: "require_full_payment_before_delivery" },
+    where: { firmId_key: { firmId: order.firmId, key: "require_full_payment_before_delivery" } },
   });
   const requireFullPaymentBeforeDelivery = deliveryPolicy?.value === "true";
 

@@ -130,6 +130,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
 
 export interface PostLedgerInput {
   branchId: string;
+  firmId: string;
   reference: string;
   description: string;
   accountCategory: FinancialAccountCategory;
@@ -178,6 +179,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
       await tx.cashTransaction.create({
         data: {
           branchId: input.branchId,
+          firmId: input.firmId,
           type: cashDelta >= 0 ? "CASH_IN" : "CASH_OUT",
           amount: Math.abs(cashDelta),
           balanceAfter: cashBalanceAfter,
@@ -222,6 +224,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
     const ledger = await tx.financialLedger.create({
       data: {
         branchId: input.branchId,
+        firmId: input.firmId,
         reference: input.reference,
         description: input.description,
         accountCategory: input.accountCategory,
@@ -249,6 +252,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
  */
 export async function transferCashBank(params: {
   branchId: string;
+  firmId: string;
   bankAccountId: string;
   amount: number;
   direction: "CASH_TO_BANK" | "BANK_TO_CASH";
@@ -281,6 +285,7 @@ export async function transferCashBank(params: {
       await tx.cashTransaction.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           type: "DEPOSIT_TO_BANK",
           amount,
           balanceAfter: newCashBal,
@@ -306,6 +311,7 @@ export async function transferCashBank(params: {
       await tx.financialLedger.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           reference: ref,
           description: `Cash Deposit -> ${bank.bankName} (${bank.accountName})`,
           accountCategory: "TRANSFER",
@@ -343,6 +349,7 @@ export async function transferCashBank(params: {
       await tx.cashTransaction.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           type: "WITHDRAWAL_FROM_BANK",
           amount,
           balanceAfter: newCashBal,
@@ -355,6 +362,7 @@ export async function transferCashBank(params: {
       await tx.financialLedger.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           reference: ref,
           description: `Bank Withdrawal -> Cash in Hand (${bank.bankName})`,
           accountCategory: "TRANSFER",
@@ -489,6 +497,7 @@ export async function voidLedgerEntry(params: {
     await tx.financialLedger.create({
       data: {
         branchId: entry.branchId,
+        firmId: entry.firmId,
         reference: revRef,
         description: `VOIDING: ${entry.description} (Reason: ${params.reason})`,
         accountCategory: "ADJUSTMENT",
@@ -595,6 +604,7 @@ export async function listBankAccounts(branchId?: string) {
 export async function saveBankAccount(params: {
   id?: string;
   branchId: string;
+  firmId: string;
   accountName: string;
   bankName: string;
   accountNumber: string;
@@ -619,6 +629,7 @@ export async function saveBankAccount(params: {
   return await prisma.bankAccount.create({
     data: {
       branchId: params.branchId,
+      firmId: params.firmId,
       accountName: params.accountName,
       bankName: params.bankName,
       accountNumber: params.accountNumber,
@@ -659,6 +670,7 @@ export async function listReconciliations(branchId?: string) {
 
 export async function postReconciliation(params: {
   branchId: string;
+  firmId: string;
   type: ReconciliationType;
   bankAccountId?: string | null;
   expectedBalance: number;
@@ -693,6 +705,7 @@ export async function postReconciliation(params: {
         await tx.cashTransaction.create({
           data: {
             branchId: params.branchId,
+            firmId: params.firmId,
             type: "ADJUSTMENT",
             amount: Math.abs(difference),
             balanceAfter: params.actualBalance,

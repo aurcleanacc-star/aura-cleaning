@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { isGlobalRole, type PermissionCode } from "@/lib/rbac";
+import { isGlobalRole, isPlatformRole, type PermissionCode } from "@/lib/rbac";
 import type { UserRole } from "@/generated/prisma/enums";
 
 export interface SessionUser {
@@ -16,6 +16,19 @@ export interface SessionUser {
   branchCode: string | null;
   employeeCode: string | null;
   permissions: PermissionCode[];
+  /** The firm this user's own account belongs to. Null only for PLATFORM_ADMIN. */
+  firmId: string | null;
+  firmName: string | null;
+  /**
+   * The firm actually being operated in for this request. Equal to firmId
+   * for every ordinary firm user (fixed, never switchable). For
+   * PLATFORM_ADMIN this is whichever firm they last "entered" via the Firms
+   * module's switcher — null until they do, in which case operational
+   * pages have nothing to scope to and requireFirm() below sends them back
+   * to /firms rather than ever falling through to an unscoped query.
+   */
+  activeFirmId: string | null;
+  activeFirmName: string | null;
 }
 
 export class AuthorizationError extends Error {
@@ -46,6 +59,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     branchCode: session.user.branchCode,
     employeeCode: session.user.employeeCode,
     permissions: session.user.permissions ?? [],
+    firmId: session.user.firmId ?? null,
+    firmName: session.user.firmName ?? null,
+    activeFirmId: session.user.activeFirmId ?? null,
+    activeFirmName: session.user.activeFirmName ?? null,
   };
 }
 
@@ -91,34 +108,84 @@ export async function authorize(
 }
 
 /**
- * Branch scoping. Global roles may query any branch (or all of them); everyone
- * else is pinned to the branch they belong to, whatever the request asks for.
+ * The tenant boundary every operational query must filter by. Never reads
+ * from a request body, query string, or client-supplied value — always the
+ * server-resolved session. Throws for a PLATFORM_ADMIN who hasn't entered a
+ * firm yet, rather than ever letting a caller fall back to "no filter".
+ */
+export function requireFirmId(user: SessionUser): string {
+  if (!user.activeFirmId) {
+    throw new AuthorizationError(
+      isPlatformRole(user.role)
+        ? "Select a firm from the Firms module before accessing operational data."
+        : "Your account is not assigned to a firm.",
+    );
+  }
+  return user.activeFirmId;
+}
+
+/** For pages: 403 page instead of throwing when no firm is active. */
+export async function requirePermissionInFirm(
+  permission: PermissionCode | PermissionCode[],
+): Promise<SessionUser & { activeFirmId: string }> {
+  const user = await requirePermission(permission);
+  if (!user.activeFirmId) redirect("/firms");
+  return user as SessionUser & { activeFirmId: string };
+}
+
+/**
+ * Branch scoping. Global roles may query any branch within their own firm
+ * (or all of them); everyone else is pinned to the branch they belong to,
+ * whatever the request asks for. `firmId` is always the caller's own
+ * resolved tenant — every query built from this result MUST also filter by
+ * it, since `branchId: undefined` (the "all branches" case) applies no
+ * branch filter at all and would otherwise return every firm's rows.
  */
 export function resolveBranchScope(
   user: SessionUser,
   requestedBranchId?: string | null,
-): { branchId?: string; canSeeAllBranches: boolean } {
+): { branchId?: string; canSeeAllBranches: boolean; firmId: string } {
+  const firmId = requireFirmId(user);
   const canSeeAllBranches =
     isGlobalRole(user.role) ||
     user.permissions.includes("dashboard.view_all_branches" as PermissionCode);
 
   if (!canSeeAllBranches) {
-    return { branchId: user.branchId ?? "__no_branch__", canSeeAllBranches: false };
+    return { branchId: user.branchId ?? "__no_branch__", canSeeAllBranches: false, firmId };
   }
 
   if (requestedBranchId && requestedBranchId !== "all") {
-    return { branchId: requestedBranchId, canSeeAllBranches: true };
+    return { branchId: requestedBranchId, canSeeAllBranches: true, firmId };
   }
 
-  return { branchId: undefined, canSeeAllBranches: true };
+  return { branchId: undefined, canSeeAllBranches: true, firmId };
 }
 
-/** Throws if a user tries to touch a record belonging to another branch. */
+/**
+ * Throws if a user tries to touch a record belonging to another branch.
+ * Firm-safe by construction: a user's own branchId is only ever assigned
+ * from a branch in their own firm (enforced at staff-creation time), so a
+ * specific branchId can never belong to another tenant.
+ */
 export function assertBranchAccess(user: SessionUser, branchId: string | null) {
   if (isGlobalRole(user.role)) return;
   if (!branchId) return;
   if (user.branchId !== branchId) {
     throw new AuthorizationError("This record belongs to a different branch");
+  }
+}
+
+/**
+ * Throws (403-equivalent) if a fetched record's own firmId doesn't match
+ * the caller's active firm. This is the direct-by-id ownership check the
+ * multi-tenant spec requires: GET /api/orders/123 must verify
+ * order.firmId === currentUser.firmId before returning anything, no matter
+ * how the id was supplied.
+ */
+export function assertFirmAccess(user: SessionUser, recordFirmId: string | null | undefined) {
+  const firmId = requireFirmId(user);
+  if (recordFirmId !== firmId) {
+    throw new AuthorizationError("This record belongs to a different organization");
   }
 }
 

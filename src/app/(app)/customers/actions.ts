@@ -10,6 +10,7 @@ import {
   assertBranchAccess,
   authorize,
   hasPermission,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -52,6 +53,7 @@ export async function createCustomerAction(
       data: {
         code: await nextCustomerCode(),
         branchId: input.branchId,
+        firmId: requireFirmId(user),
         name: input.name,
         phone,
         email: input.email ?? null,

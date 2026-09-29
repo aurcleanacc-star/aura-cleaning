@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
-import { authorize } from "@/lib/session";
+import { assertFirmAccess, authorize, requireFirmId } from "@/lib/session";
 import {
   BusinessRuleError,
   NotFoundError,
@@ -30,6 +30,15 @@ export async function saveB2BAccountAction(
     const user = await authorize(PERMISSIONS.B2B_MANAGE);
     const input = b2bAccountSchema.parse(payload);
 
+    if (input.id) {
+      const existing = await prisma.b2BAccount.findUnique({
+        where: { id: input.id },
+        select: { firmId: true },
+      });
+      if (!existing) throw new NotFoundError("Corporate account not found");
+      assertFirmAccess(user, existing.firmId);
+    }
+
     const data = {
       code: input.code,
       businessName: input.businessName,
@@ -48,7 +57,7 @@ export async function saveB2BAccountAction(
 
     const account = input.id
       ? await prisma.b2BAccount.update({ where: { id: input.id }, data })
-      : await prisma.b2BAccount.create({ data });
+      : await prisma.b2BAccount.create({ data: { ...data, firmId: requireFirmId(user) } });
 
     await recordAudit({
       userId: user.id,
@@ -267,6 +276,7 @@ export async function generateStatementAction(
       where: { id: input.accountId },
       select: {
         id: true,
+        firmId: true,
         businessName: true,
         billingAddress: true,
         gstNumber: true,
@@ -276,6 +286,7 @@ export async function generateStatementAction(
       },
     });
     if (!account) throw new NotFoundError("Corporate account not found");
+    assertFirmAccess(user, account.firmId);
 
     const periodEnd = new Date(input.periodEnd);
     periodEnd.setHours(23, 59, 59, 999);
@@ -347,6 +358,7 @@ export async function generateStatementAction(
           type: "B2B_MONTHLY",
           status: paid >= total ? "PAID" : "ISSUED",
           branchId,
+          firmId: account.firmId,
           b2bAccountId: account.id,
           periodStart: input.periodStart,
           periodEnd,

@@ -295,7 +295,7 @@ export async function validateBatchScan(params: ValidateBatchScanParams): Promis
           stage: stageConfig.stage,
           outcome: "COMPLETED",
           scannedVia: `batch-${params.operation.toLowerCase()}`,
-          actor: { userId: params.userId, userName: "Batch Scanner", branchId: params.branchId },
+          actor: { userId: params.userId, userName: "Batch Scanner", branchId: params.branchId, firmId: garment.firmId },
         });
         currentStatus = advResult.status;
         if (advResult.nextStage) currentStage = advResult.nextStage;

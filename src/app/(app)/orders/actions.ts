@@ -9,8 +9,10 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -66,6 +68,7 @@ export async function createOrderAction(
         userId: user.id,
         userName: user.name,
         branchId,
+        firmId: requireFirmId(user),
         canOverridePrice: hasPermission(user, PERMISSIONS.ORDER_OVERRIDE_PRICE),
       },
     );
@@ -157,6 +160,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       where: { id: input.orderId },
       select: {
         id: true,
+        firmId: true,
         branchId: true,
         status: true,
         orderNumber: true,
@@ -167,6 +171,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       },
     });
     if (!order) throw new NotFoundError("Order not found");
+    assertFirmAccess(user, order.firmId);
     assertBranchAccess(user, order.branchId);
 
     if (!canTransition(order.status, input.status)) {
@@ -177,7 +182,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
 
     if (input.status === "DELIVERED" && num(order.outstandingAmount) > 0) {
       const policy = await prisma.setting.findUnique({
-        where: { key: "require_full_payment_before_delivery" },
+        where: { firmId_key: { firmId: order.firmId, key: "require_full_payment_before_delivery" } },
       });
       if (policy?.value === "true") {
         throw new BusinessRuleError(
@@ -190,7 +195,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       setOrderStatus(tx, {
         orderId: order.id,
         status: input.status,
-        actor: { userId: user.id, userName: user.name, branchId: order.branchId },
+        actor: { userId: user.id, userName: user.name, branchId: order.branchId, firmId: order.firmId },
         note: input.note ?? "Status changed manually",
       }),
     );
@@ -399,10 +404,11 @@ export async function rewashOrderAction(
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, branchId: true, orderNumber: true, status: true },
+      select: { id: true, branchId: true, firmId: true, orderNumber: true, status: true },
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
     if (["CANCELLED", "REFUNDED"].includes(order.status)) {
       throw new BusinessRuleError("This order is closed");
     }
@@ -457,7 +463,7 @@ export async function rewashOrderAction(
       await setOrderStatus(tx, {
         orderId: order.id,
         status: "WASHING",
-        actor: { userId: user.id, userName: user.name, branchId: order.branchId },
+        actor: { userId: user.id, userName: user.name, branchId: order.branchId, firmId: order.firmId },
         note: `Rewash requested: ${reason}`,
       });
 

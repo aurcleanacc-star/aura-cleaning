@@ -9,8 +9,10 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS, STAGE_PERMISSION } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
+  requireFirmId,
 } from "@/lib/session";
 import {
   BusinessRuleError,
@@ -60,7 +62,7 @@ export async function advanceGarmentAction(
       note: input.note ?? null,
       scannedVia: input.scannedVia ?? "manual",
       contextOrderId: input.contextOrderId ?? null,
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId },
+      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: requireFirmId(user) },
     });
 
     await recordAudit({
@@ -104,7 +106,7 @@ export async function bulkAdvanceAction(
       outcome: input.outcome,
       note: input.note ?? null,
       scannedVia: "bulk",
-      actor: { userId: user.id, userName: user.name, branchId: user.branchId },
+      actor: { userId: user.id, userName: user.name, branchId: user.branchId, firmId: requireFirmId(user) },
     });
 
     await recordAudit({
@@ -168,9 +170,10 @@ export async function markGarmentAction(payload: unknown): Promise<ActionResult<
 
     const garment = await prisma.garment.findUnique({
       where: { id: input.garmentId },
-      select: { id: true, branchId: true, garmentCode: true, status: true, orderId: true },
+      select: { id: true, firmId: true, branchId: true, garmentCode: true, status: true, orderId: true },
     });
     if (!garment) throw new NotFoundError("Garment not found");
+    assertFirmAccess(user, garment.firmId);
     assertBranchAccess(user, garment.branchId);
 
     await prisma.$transaction(async (tx) => {
@@ -198,6 +201,7 @@ export async function markGarmentAction(payload: unknown): Promise<ActionResult<
         userId: user.id,
         userName: user.name,
         branchId: garment.branchId,
+        firmId: garment.firmId,
       });
     });
 

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
-import { authorize, requireWriteBranch } from "@/lib/session";
+import { assertFirmAccess, authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
 import { runAction, type ActionResult, BusinessRuleError, NotFoundError } from "@/lib/action-result";
 import {
   postFinancialTransaction,
@@ -40,6 +40,7 @@ export async function recordIncomingMoneyAction(payload: unknown): Promise<Actio
     if (input.orderId) {
       const order = await prisma.order.findUnique({ where: { id: input.orderId } });
       if (!order) throw new NotFoundError("Order not found");
+      assertFirmAccess(user, order.firmId);
 
       const newPaid = Number(order.paidAmount) + input.amount;
       const newOut = Math.max(0, Number(order.totalAmount) - newPaid);
@@ -55,6 +56,7 @@ export async function recordIncomingMoneyAction(payload: unknown): Promise<Actio
           paymentNumber: payRef,
           orderId: order.id,
           branchId,
+          firmId: order.firmId,
           amount: input.amount,
           method: input.paymentMethod,
           state: "CAPTURED",
@@ -68,6 +70,7 @@ export async function recordIncomingMoneyAction(payload: unknown): Promise<Actio
     // 2. Post to Central Financial Ledger
     await postFinancialTransaction({
       branchId,
+      firmId: requireFirmId(user),
       reference: payRef,
       description: input.description,
       accountCategory: "SALES",
@@ -126,6 +129,7 @@ export async function recordOutgoingMoneyAction(payload: unknown): Promise<Actio
       data: {
         expenseNumber: expRef,
         branchId,
+        firmId: requireFirmId(user),
         category: input.category,
         amount: input.amount,
         description: input.description,
@@ -140,6 +144,7 @@ export async function recordOutgoingMoneyAction(payload: unknown): Promise<Actio
 
     await postFinancialTransaction({
       branchId,
+      firmId: requireFirmId(user),
       reference: expRef,
       description: `[${input.category}] ${input.description}`,
       accountCategory: "EXPENSE",
@@ -183,6 +188,7 @@ export async function transferCashBankAction(payload: unknown): Promise<ActionRe
 
     const result = await transferCashBank({
       branchId,
+      firmId: requireFirmId(user),
       bankAccountId: input.bankAccountId,
       amount: input.amount,
       direction: input.direction,
@@ -250,9 +256,19 @@ export async function saveBankAccountAction(payload: unknown): Promise<ActionRes
     const input = bankAccountSchema.parse(payload);
     const branchId = requireWriteBranch(user, input.branchId);
 
+    if (input.id) {
+      const existing = await prisma.bankAccount.findUnique({
+        where: { id: input.id },
+        select: { firmId: true },
+      });
+      if (!existing) throw new NotFoundError("Bank account not found");
+      assertFirmAccess(user, existing.firmId);
+    }
+
     const bank = await saveBankAccount({
       id: input.id,
       branchId,
+      firmId: requireFirmId(user),
       accountName: input.accountName,
       bankName: input.bankName,
       accountNumber: input.accountNumber,
@@ -292,6 +308,7 @@ export async function submitReconciliationAction(payload: unknown): Promise<Acti
 
     const rec = await postReconciliation({
       branchId,
+      firmId: requireFirmId(user),
       type: input.type,
       bankAccountId: input.bankAccountId,
       expectedBalance: input.expectedBalance,
