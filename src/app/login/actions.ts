@@ -91,13 +91,14 @@ export async function loginAction(
 
   const user = await prisma.user.findUnique({
     where: { accessCode },
-    select: { id: true, branchId: true, role: true },
+    select: { id: true, branchId: true, firmId: true, role: true },
   });
 
   if (user) {
     await recordAudit({
       userId: user.id,
       branchId: user.branchId,
+      firmId: user.firmId,
       action: "LOGIN",
       entity: "User",
       entityId: user.id,
