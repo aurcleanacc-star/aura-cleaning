@@ -30,10 +30,16 @@ function getPrismaClient(): PrismaClient {
   if (globalForPrisma.prisma) {
     return globalForPrisma.prisma;
   }
+  // Cache on globalThis in every environment, not just development. This
+  // module's export is a Proxy whose get() trap calls getPrismaClient() on
+  // every single property access (prisma.order, prisma.garment, ...) — so
+  // without this cache, production requests were constructing a brand-new
+  // PrismaClient (and a brand-new pg connection pool) on every property
+  // access and never closing it, exhausting Postgres's max_connections
+  // within a handful of page loads. Dev keeps the same global-cache pattern
+  // it always needed to survive Fast Refresh module reloads.
   const client = createPrismaClient();
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client;
-  }
+  globalForPrisma.prisma = client;
   return client;
 }
 
