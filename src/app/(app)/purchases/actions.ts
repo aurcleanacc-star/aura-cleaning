@@ -235,6 +235,7 @@ export async function receiveGoodsAction(
         await applyStockMovement(tx, {
           itemId: poItem.itemId,
           branchId: po.branchId,
+          firmId: po.firmId,
           type: "STOCK_IN",
           quantity: line.quantity,
           unitCost: num(poItem.unitPrice),
@@ -392,6 +393,22 @@ export async function createPurchaseReturnAction(
     const input = purchaseReturnSchema.parse(payload);
     const branchId = await requireWriteBranch(user, input.branchId);
 
+    const returnSupplier = await prisma.supplier.findUnique({
+      where: { id: input.supplierId },
+      select: { firmId: true },
+    });
+    if (!returnSupplier) throw new NotFoundError("Supplier not found");
+    assertFirmAccess(user, returnSupplier.firmId);
+
+    if (input.poId) {
+      const returnPo = await prisma.purchaseOrder.findUnique({
+        where: { id: input.poId },
+        select: { firmId: true },
+      });
+      if (!returnPo) throw new NotFoundError("Purchase order not found");
+      assertFirmAccess(user, returnPo.firmId);
+    }
+
     const total = round2(
       input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
     );
@@ -421,6 +438,7 @@ export async function createPurchaseReturnAction(
         await applyStockMovement(tx, {
           itemId: item.itemId,
           branchId,
+          firmId: returnSupplier.firmId,
           type: "STOCK_OUT",
           quantity: item.quantity,
           unitCost: item.unitPrice,

@@ -8,6 +8,7 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
   requireFirmId,
@@ -88,10 +89,11 @@ export async function updateCustomerAction(payload: unknown): Promise<ActionResu
 
     const customer = await prisma.customer.findUnique({
       where: { id: input.customerId },
-      select: { id: true, branchId: true, name: true, phone: true },
+      select: { id: true, branchId: true, firmId: true, name: true, phone: true },
     });
     if (!customer) throw new NotFoundError("Customer not found");
     assertBranchAccess(user, customer.branchId);
+    assertFirmAccess(user, customer.firmId);
 
     const phone = normalisePhone(input.phone);
     if (phone !== customer.phone) {
@@ -160,12 +162,14 @@ export async function deleteCustomerAction(
         name: true,
         phone: true,
         branchId: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orders: true } },
       },
     });
     if (!customer) throw new NotFoundError("Customer not found");
     assertBranchAccess(user, customer.branchId);
+    assertFirmAccess(user, customer.firmId);
 
     if (customer._count.orders > 0) {
       if (!customer.isActive) {

@@ -10,6 +10,7 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   requireFirmId,
   requireWriteBranch,
@@ -411,11 +412,13 @@ export async function archiveServiceAction(
       select: {
         id: true,
         name: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orderItems: true, garments: true, rates: true } },
       },
     });
     if (!service) throw new NotFoundError("Service not found");
+    assertFirmAccess(user, service.firmId);
 
     const inUse = service._count.orderItems + service._count.garments > 0;
 
@@ -462,11 +465,13 @@ export async function archiveGarmentTypeAction(
       select: {
         id: true,
         name: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orderItems: true, garments: true } },
       },
     });
     if (!type) throw new NotFoundError("Garment type not found");
+    assertFirmAccess(user, type.firmId);
 
     if (type._count.orderItems + type._count.garments > 0) {
       if (!type.isActive) throw new BusinessRuleError(`${type.name} is already retired`);

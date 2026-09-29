@@ -130,10 +130,11 @@ export async function updateGarmentAction(payload: unknown): Promise<ActionResul
 
     const garment = await prisma.garment.findUnique({
       where: { id: input.garmentId },
-      select: { id: true, branchId: true, garmentCode: true },
+      select: { id: true, branchId: true, firmId: true, garmentCode: true },
     });
     if (!garment) throw new NotFoundError("Garment not found");
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     await prisma.garment.update({
       where: { id: garment.id },
@@ -243,10 +244,11 @@ export async function uploadGarmentPhotoAction(
 
     const garment = await prisma.garment.findUnique({
       where: { id: garmentId },
-      select: { id: true, branchId: true, garmentCode: true },
+      select: { id: true, branchId: true, firmId: true, garmentCode: true },
     });
     if (!garment) throw new NotFoundError("Garment not found");
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     const stored = await getStorageProvider().upload({
       body: Buffer.from(await file.arrayBuffer()),
@@ -318,6 +320,7 @@ export async function scanForStageAction(
 
     if (!garment) throw new NotFoundError(`No garment matches ${parsed.value}`);
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     const task = garment.tasks.find((t) => t.stage === stage);
     if (!task) {

@@ -26,6 +26,7 @@ export async function applyStockMovement(
   params: {
     itemId: string;
     branchId: string;
+    firmId: string;
     type: InventoryTxnType;
     quantity: number;
     unitCost?: number | null;
@@ -37,9 +38,10 @@ export async function applyStockMovement(
 ): Promise<number> {
   const item = await tx.inventoryItem.findUnique({
     where: { id: params.itemId },
-    select: { id: true, name: true, unit: true },
+    select: { id: true, name: true, unit: true, firmId: true },
   });
   if (!item) throw new NotFoundError("Inventory item not found");
+  if (item.firmId !== params.firmId) throw new NotFoundError("Inventory item not found");
 
   const stock = await tx.inventoryStock.upsert({
     where: { itemId_branchId: { itemId: params.itemId, branchId: params.branchId } },

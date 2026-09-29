@@ -96,6 +96,7 @@ export async function recordStockMovementAction(
       applyStockMovement(tx, {
         itemId: input.itemId,
         branchId,
+        firmId: requireFirmId(user),
         type: input.type,
         quantity: input.quantity,
         unitCost: input.unitCost ?? null,
@@ -129,23 +130,27 @@ export async function transferStockAction(
     const input = stockTransferSchema.parse(payload);
 
     assertBranchAccess(user, input.fromBranchId);
+    const firmId = requireFirmId(user);
 
     const [fromBranch, toBranch] = await Promise.all([
       prisma.branch.findUnique({
         where: { id: input.fromBranchId },
-        select: { name: true },
+        select: { name: true, firmId: true },
       }),
       prisma.branch.findUnique({
         where: { id: input.toBranchId },
-        select: { name: true },
+        select: { name: true, firmId: true },
       }),
     ]);
     if (!fromBranch || !toBranch) throw new NotFoundError("Branch not found");
+    assertFirmAccess(user, fromBranch.firmId);
+    assertFirmAccess(user, toBranch.firmId);
 
     const result = await prisma.$transaction(async (tx) => {
       const fromBalance = await applyStockMovement(tx, {
         itemId: input.itemId,
         branchId: input.fromBranchId,
+        firmId,
         type: "TRANSFER_OUT",
         quantity: input.quantity,
         reference: `To ${toBranch.name}`,
@@ -157,6 +162,7 @@ export async function transferStockAction(
       const toBalance = await applyStockMovement(tx, {
         itemId: input.itemId,
         branchId: input.toBranchId,
+        firmId,
         type: "TRANSFER_IN",
         quantity: input.quantity,
         reference: `From ${fromBranch.name}`,
@@ -191,9 +197,10 @@ export async function toggleInventoryItemAction(
 
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId },
-      select: { id: true, sku: true, name: true },
+      select: { id: true, sku: true, name: true, firmId: true },
     });
     if (!item) throw new NotFoundError("Inventory item not found");
+    assertFirmAccess(user, item.firmId);
 
     if (!isActive) {
       const remaining = await prisma.inventoryStock.aggregate({

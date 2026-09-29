@@ -82,12 +82,23 @@ export async function saveContractAction(
 
     const account = await prisma.b2BAccount.findUnique({
       where: { id: input.accountId },
-      select: { id: true, businessName: true },
+      select: { id: true, businessName: true, firmId: true },
     });
     if (!account) throw new NotFoundError("Corporate account not found");
+    assertFirmAccess(user, account.firmId);
 
     if (input.endDate && input.endDate < input.startDate) {
       throw new BusinessRuleError("The end date cannot be before the start date");
+    }
+
+    if (input.id) {
+      const existingContract = await prisma.b2BContract.findUnique({
+        where: { id: input.id },
+        select: { accountId: true },
+      });
+      if (!existingContract || existingContract.accountId !== account.id) {
+        throw new NotFoundError("Contract not found");
+      }
     }
 
     const contract = input.id
@@ -137,9 +148,15 @@ export async function saveRateCardAction(payload: unknown): Promise<ActionResult
 
     const contract = await prisma.b2BContract.findUnique({
       where: { id: input.contractId },
-      select: { id: true, contractNumber: true, accountId: true },
+      select: {
+        id: true,
+        contractNumber: true,
+        accountId: true,
+        account: { select: { firmId: true } },
+      },
     });
     if (!contract) throw new NotFoundError("Contract not found");
+    assertFirmAccess(user, contract.account.firmId);
 
     // Postgres treats NULLs as distinct in a unique index, so a service-wide
     // rate (garmentTypeId = null) cannot be upserted on the compound key.
@@ -192,9 +209,15 @@ export async function deleteRateCardAction(rateCardId: string): Promise<ActionRe
 
     const rateCard = await prisma.b2BRateCard.findUnique({
       where: { id: rateCardId },
-      select: { id: true, contract: { select: { accountId: true, contractNumber: true } } },
+      select: {
+        id: true,
+        contract: {
+          select: { accountId: true, contractNumber: true, account: { select: { firmId: true } } },
+        },
+      },
     });
     if (!rateCard) throw new NotFoundError("Rate card not found");
+    assertFirmAccess(user, rateCard.contract.account.firmId);
 
     await prisma.b2BRateCard.delete({ where: { id: rateCardId } });
 
@@ -215,6 +238,13 @@ export async function saveScheduleAction(payload: unknown): Promise<ActionResult
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.B2B_MANAGE);
     const input = scheduleSchema.parse(payload);
+
+    const scheduleAccount = await prisma.b2BAccount.findUnique({
+      where: { id: input.accountId },
+      select: { firmId: true },
+    });
+    if (!scheduleAccount) throw new NotFoundError("Corporate account not found");
+    assertFirmAccess(user, scheduleAccount.firmId);
 
     await prisma.b2BSchedule.create({
       data: {
@@ -244,12 +274,13 @@ export async function deleteScheduleAction(
   scheduleId: string,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
-    await authorize(PERMISSIONS.B2B_MANAGE);
+    const user = await authorize(PERMISSIONS.B2B_MANAGE);
     const schedule = await prisma.b2BSchedule.findUnique({
       where: { id: scheduleId },
-      select: { accountId: true },
+      select: { accountId: true, account: { select: { firmId: true } } },
     });
     if (!schedule) throw new NotFoundError("Schedule not found");
+    assertFirmAccess(user, schedule.account.firmId);
 
     await prisma.b2BSchedule.delete({ where: { id: scheduleId } });
     revalidatePath(`/b2b/${schedule.accountId}`);

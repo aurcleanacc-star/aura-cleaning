@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   createDeliveryChallan,
@@ -25,6 +25,7 @@ export async function createDeliveryChallanAction(data: {
       ...data,
       userId: session.id,
       userBranchId: session.branchId || undefined,
+      firmId: requireFirmId(session),
     });
 
     revalidatePath("/delivery-challans");
@@ -64,6 +65,7 @@ export async function updateChallanStatusAction(
     const updated = await updateChallanStatus(id, toStatus, {
       ...options,
       userId: session.id,
+      firmId: requireFirmId(session),
     });
 
     revalidatePath("/delivery-challans");
@@ -90,7 +92,7 @@ export async function cancelChallanAction(id: string, reason: string) {
   const session = await requirePermission(PERMISSIONS.DELIVERY_MANAGE);
 
   try {
-    const updated = await cancelDeliveryChallan(id, reason, session.id);
+    const updated = await cancelDeliveryChallan(id, reason, session.id, requireFirmId(session));
 
     revalidatePath("/delivery-challans");
     revalidatePath(`/delivery-challans/${id}`);

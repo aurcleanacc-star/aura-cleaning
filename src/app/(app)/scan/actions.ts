@@ -61,6 +61,7 @@ export async function scanGarmentAction(payload: unknown): Promise<ActionResult<
       contextOrderId: input.contextOrderId ?? null,
       branchIds,
       branchId: user.branchId,
+      firmId: requireFirmId(user),
       userId: user.id,
     });
 

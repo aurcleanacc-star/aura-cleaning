@@ -117,10 +117,11 @@ export async function updateComplaintAction(payload: unknown): Promise<ActionRes
 
     const complaint = await prisma.complaint.findUnique({
       where: { id: input.complaintId },
-      select: { id: true, branchId: true, complaintNumber: true, status: true },
+      select: { id: true, branchId: true, firmId: true, complaintNumber: true, status: true },
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
 
     if (["RESOLVED", "CLOSED"].includes(complaint.status) && input.status) {
       throw new BusinessRuleError("This complaint is already closed");
@@ -179,6 +180,7 @@ export async function resolveComplaintAction(payload: unknown): Promise<ActionRe
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
     if (["RESOLVED", "CLOSED"].includes(complaint.status)) {
       throw new BusinessRuleError("This complaint is already resolved");
     }
@@ -330,10 +332,11 @@ export async function uploadComplaintAttachmentAction(
 
     const complaint = await prisma.complaint.findUnique({
       where: { id: complaintId },
-      select: { id: true, branchId: true, complaintNumber: true },
+      select: { id: true, branchId: true, firmId: true, complaintNumber: true },
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
 
     const stored = await getStorageProvider().upload({
       body: Buffer.from(await file.arrayBuffer()),

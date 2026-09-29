@@ -225,6 +225,7 @@ export async function voidLedgerAction(payload: unknown): Promise<ActionResult<{
       ledgerId: input.ledgerId,
       reason: input.reason,
       userId: user.id,
+      firmId: requireFirmId(user),
     });
 
     await recordAudit({

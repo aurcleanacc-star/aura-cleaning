@@ -240,6 +240,7 @@ export async function resolveGarmentScan(params: {
   contextOrderId?: string | null;
   branchIds: string[] | null;
   branchId: string;
+  firmId: string;
   userId: string;
 }): Promise<ScanResult> {
   const code = params.rawCode.trim();
@@ -255,7 +256,9 @@ export async function resolveGarmentScan(params: {
   }
 
   const parsed = parseScan(code);
-  const branchWhere = params.branchIds ? { branchId: { in: params.branchIds } } : {};
+  const branchWhere = params.branchIds
+    ? { branchId: { in: params.branchIds }, firmId: params.firmId }
+    : { firmId: params.firmId };
 
   let garment: GarmentWithCard | null = null;
 

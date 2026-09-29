@@ -103,6 +103,7 @@ export async function updateOrderAction(payload: unknown): Promise<ActionResult<
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         status: true,
         orderNumber: true,
         customerName: true,
@@ -112,6 +113,7 @@ export async function updateOrderAction(payload: unknown): Promise<ActionResult<
     });
     if (!existing) throw new NotFoundError("Order not found");
     assertBranchAccess(user, existing.branchId);
+    assertFirmAccess(user, existing.firmId);
 
     if (["CANCELLED", "REFUNDED"].includes(existing.status)) {
       throw new BusinessRuleError("A cancelled order can no longer be edited");
@@ -240,6 +242,7 @@ export async function cancelOrderAction(payload: unknown): Promise<ActionResult<
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         status: true,
         orderNumber: true,
         paidAmount: true,
@@ -249,6 +252,7 @@ export async function cancelOrderAction(payload: unknown): Promise<ActionResult<
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     if (["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)) {
       throw new BusinessRuleError(
@@ -344,6 +348,7 @@ export async function applyDiscountAction(payload: unknown): Promise<ActionResul
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         orderNumber: true,
         subtotal: true,
         gstRate: true,
@@ -353,6 +358,7 @@ export async function applyDiscountAction(payload: unknown): Promise<ActionResul
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
     if (["CANCELLED", "REFUNDED", "DELIVERED"].includes(order.status)) {
       throw new BusinessRuleError("This order is closed and its pricing cannot change");
     }

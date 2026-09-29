@@ -205,6 +205,9 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
       const bank = await tx.bankAccount.findUnique({
         where: { id: input.bankAccountId },
       });
+      if (bank && bank.firmId !== input.firmId) {
+        throw new Error("Bank account not found");
+      }
       if (bank) {
         const bankDelta = credit - debit;
         bankBalanceAfter = round2(num(bank.currentBalance) + bankDelta);
@@ -273,7 +276,7 @@ export async function transferCashBank(params: {
 
   return await prisma.$transaction(async (tx) => {
     const bank = await tx.bankAccount.findUnique({ where: { id: params.bankAccountId } });
-    if (!bank) throw new Error("Bank account not found");
+    if (!bank || bank.firmId !== params.firmId) throw new Error("Bank account not found");
 
     const cash = await tx.cashAccount.upsert({
       where: { branchId: params.branchId },
@@ -486,10 +489,12 @@ export async function voidLedgerEntry(params: {
   ledgerId: string;
   reason: string;
   userId: string;
+  firmId: string;
 }) {
   return await prisma.$transaction(async (tx) => {
     const entry = await tx.financialLedger.findUnique({ where: { id: params.ledgerId } });
     if (!entry) throw new Error("Ledger entry not found");
+    if (entry.firmId !== params.firmId) throw new Error("Ledger entry not found");
     if (entry.isVoided) throw new Error("Ledger entry is already voided");
 
     await tx.financialLedger.update({
@@ -626,6 +631,13 @@ export async function saveBankAccount(params: {
   const openingBal = round2(params.openingBalance ?? 0);
 
   if (params.id) {
+    const existing = await prisma.bankAccount.findUnique({
+      where: { id: params.id },
+      select: { firmId: true },
+    });
+    if (!existing || existing.firmId !== params.firmId) {
+      throw new Error("Bank account not found");
+    }
     return await prisma.bankAccount.update({
       where: { id: params.id },
       data: {
@@ -692,6 +704,16 @@ export async function postReconciliation(params: {
   const difference = round2(params.actualBalance - params.expectedBalance);
 
   return await prisma.$transaction(async (tx) => {
+    if (params.bankAccountId) {
+      const bank = await tx.bankAccount.findUnique({
+        where: { id: params.bankAccountId },
+        select: { firmId: true },
+      });
+      if (!bank || bank.firmId !== params.firmId) {
+        throw new Error("Bank account not found");
+      }
+    }
+
     const rec = await tx.reconciliation.create({
       data: {
         branchId: params.branchId,

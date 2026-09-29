@@ -107,6 +107,7 @@ export async function deleteExpenseAction(id: string): Promise<ActionResult<{ su
 
     const expense = await prisma.expense.findUnique({ where: { id } });
     if (!expense) throw new NotFoundError("Expense record not found");
+    assertFirmAccess(user, expense.firmId);
 
     await prisma.expense.delete({ where: { id } });
 

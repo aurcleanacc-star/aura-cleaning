@@ -146,10 +146,11 @@ export async function assignDriverAction(payload: unknown): Promise<ActionResult
     } else {
       const delivery = await prisma.delivery.findUnique({
         where: { id: input.jobId },
-        select: { id: true, branchId: true, deliveryNumber: true, status: true },
+        select: { id: true, branchId: true, firmId: true, deliveryNumber: true, status: true },
       });
       if (!delivery) throw new NotFoundError("Delivery not found");
       assertBranchAccess(user, delivery.branchId);
+      assertFirmAccess(user, delivery.firmId);
       if (["DELIVERED", "CANCELLED"].includes(delivery.status)) {
         throw new BusinessRuleError("This delivery can no longer be reassigned");
       }
@@ -259,6 +260,7 @@ export async function dispatchDeliveryAction(payload: unknown): Promise<ActionRe
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     const isDispatcher = hasPermission(user, PERMISSIONS.DELIVERY_MANAGE);
     if (!isDispatcher && delivery.driver?.userId !== user.id) {
@@ -361,6 +363,7 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     const isDispatcher = hasPermission(user, PERMISSIONS.DELIVERY_MANAGE);
     if (!isDispatcher && delivery.driver?.userId !== user.id) {
@@ -529,12 +532,14 @@ export async function cancelDeliveryAction(payload: unknown): Promise<ActionResu
         id: true,
         deliveryNumber: true,
         branchId: true,
+        firmId: true,
         orderId: true,
         status: true,
       },
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     if (delivery.status === "DELIVERED") {
       throw new BusinessRuleError(
