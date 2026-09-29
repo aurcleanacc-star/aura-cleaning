@@ -44,6 +44,31 @@ async function seedFirm() {
   });
 }
 
+/**
+ * A fresh deployment has no way to reach the Firms module otherwise: every
+ * firm's own admin is now correctly barred from it, so the very first
+ * cross-firm Super Admin (PLATFORM_ADMIN, firmId null by design) has to
+ * come from somewhere other than that same UI. Seeded once, idempotently.
+ */
+async function seedPlatformAdmin() {
+  await prisma.user.upsert({
+    where: { email: "platform-admin@aurclean.example" },
+    create: {
+      firmId: null,
+      employeeCode: "PLAT0001",
+      name: "Platform Super Admin",
+      email: "platform-admin@aurclean.example",
+      accessCode: "900001",
+      role: "PLATFORM_ADMIN",
+      branchId: null,
+    },
+    update: {
+      accessCode: "900001",
+      role: "PLATFORM_ADMIN",
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic pseudo-randomness, so repeated seeds produce comparable data.
 // ---------------------------------------------------------------------------
@@ -2127,6 +2152,9 @@ async function main() {
   console.log("Firm…");
   await seedFirm();
 
+  console.log("Platform admin…");
+  await seedPlatformAdmin();
+
   console.log("Permissions…");
   await seedPermissions();
 
@@ -2199,7 +2227,8 @@ async function main() {
   await seedExpensesAndAttendance(branchList, users);
 
   console.log("\nDone. Sign in on the access-code screen with any of these:");
-  console.log("  100001   Super Admin   (Ravi Anand)");
+  console.log("  900001   Platform Super Admin (cross-firm, /firms)");
+  console.log("  100001   Firm Admin    (Ravi Anand)");
   console.log("  200001   Manager       (Sunita Rao — Head Office)");
   console.log("  200002   Manager       (Deepak Menon — Branch 1)");
   console.log("  200003   Manager       (Rekha Pillai — Branch 2)");

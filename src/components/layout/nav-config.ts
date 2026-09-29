@@ -278,12 +278,35 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export function visibleSections(permissions: PermissionCode[]): NavSection[] {
+/** Cross-firm platform admin's own section — never tied to any one firm's data. */
+const PLATFORM_SECTION: NavSection = {
+  label: "PLATFORM",
+  items: [
+    {
+      label: "Firms",
+      href: "/firms",
+      icon: Building2,
+      permissions: [PERMISSIONS.FIRM_VIEW],
+    },
+  ],
+};
+
+/**
+ * `platformOnly` is true for a PLATFORM_ADMIN who hasn't "entered" a firm
+ * yet (session.ts's activeFirmId is null in that state). Every operational
+ * nav item leads to a page that requires an active firm and would 403, so
+ * only the Firms section is shown until one is selected.
+ */
+export function visibleSections(
+  permissions: PermissionCode[],
+  platformOnly = false,
+): NavSection[] {
   const has = (item: NavItem) =>
     item.permissions.some((code) => permissions.includes(code));
 
-  return NAV_SECTIONS.map((section) => ({
-    ...section,
-    items: section.items.filter(has),
-  })).filter((section) => section.items.length > 0);
+  const sections = platformOnly ? [PLATFORM_SECTION] : [...NAV_SECTIONS, PLATFORM_SECTION];
+
+  return sections
+    .map((section) => ({ ...section, items: section.items.filter(has) }))
+    .filter((section) => section.items.length > 0);
 }

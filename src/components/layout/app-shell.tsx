@@ -18,19 +18,22 @@ interface AppShellProps {
     branchName: string | null;
     permissions: PermissionCode[];
   };
+  /** True for a PLATFORM_ADMIN who hasn't entered a firm yet — restricts the sidebar to the Firms module. */
+  platformOnly?: boolean;
   alerts: { alerts: Alert[]; total: number };
   children: ReactNode;
 }
 
-export function AppShell({ user, alerts, children }: AppShellProps) {
+export function AppShell({ user, platformOnly, alerts, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const canScan = user.permissions.includes("garments.scan" as PermissionCode);
+  const canScan = !platformOnly && user.permissions.includes("garments.scan" as PermissionCode);
 
   return (
     <div className="min-h-dvh bg-background">
       <Sidebar
         permissions={user.permissions}
+        platformOnly={platformOnly}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         user={user}
