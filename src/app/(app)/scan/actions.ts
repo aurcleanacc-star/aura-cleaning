@@ -48,13 +48,15 @@ export async function scanGarmentAction(payload: unknown): Promise<ActionResult<
     if (!limit.success) throw new BusinessRuleError("Scanning too fast — slow down a moment");
 
     const input = scanSchema.parse(payload);
-    const branchIds = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
-      ? null
-      : user.branchId
-        ? [user.branchId]
-        : [];
+    const hasAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
+    const branchIds = hasAllBranches ? null : user.branchId ? [user.branchId] : [];
 
-    if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
+    // A branch-scoped operator must actually have a branch. A firm-wide
+    // admin with no fixed branch of their own is fine — the scan is
+    // attributed to whichever branch the garment itself belongs to.
+    if (!user.branchId && !hasAllBranches) {
+      throw new BusinessRuleError("Your account is not assigned to a branch");
+    }
 
     const result = await resolveGarmentScan({
       rawCode: input.code,
