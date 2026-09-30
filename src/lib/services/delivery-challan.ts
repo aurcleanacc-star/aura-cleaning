@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { nextChallanNumber, nextPaymentNumber } from "@/lib/sequence";
 import { recordAudit } from "@/lib/audit";
 import { recalcOrderPayments } from "@/lib/services/orders";
+import { AuthorizationError } from "@/lib/session";
 import type { ChallanStatus, PaymentStatus, Prisma } from "@/generated/prisma/client";
 
 export interface CreateDeliveryChallanParams {
@@ -15,9 +16,12 @@ export interface CreateDeliveryChallanParams {
   garmentIds?: string[];
   userId?: string;
   userBranchId?: string;
+  /** The caller's own firm — the order must belong to it. */
+  firmId: string;
 }
 
 export interface GetDeliveryChallansParams {
+  firmId: string;
   page?: number;
   limit?: number;
   search?: string;
@@ -36,7 +40,7 @@ export interface GetDeliveryChallansParams {
  * Automatically pulls customer info, garments, prices, and totals from the order.
  */
 export async function createDeliveryChallan(params: CreateDeliveryChallanParams) {
-  const { orderId, notes, terms, deliveredByName, receivedByName, garmentIds, userId, userBranchId } = params;
+  const { orderId, notes, terms, deliveredByName, receivedByName, garmentIds, userId, userBranchId, firmId } = params;
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -63,6 +67,9 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
 
   if (!order) {
     throw new Error(`Order #${orderId} not found.`);
+  }
+  if (order.firmId !== firmId) {
+    throw new AuthorizationError("This record belongs to a different organization");
   }
 
   if (order.status === "CANCELLED" || order.status === "REFUNDED") {
@@ -104,6 +111,7 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
         challanNumber,
         orderId: order.id,
         branchId: order.branchId,
+        firmId: order.firmId,
         customerId: order.customerId,
         customerName: order.customerName,
         customerPhone: order.customerPhone,
@@ -188,8 +196,9 @@ export async function createDeliveryChallan(params: CreateDeliveryChallanParams)
 /**
  * Fetches Delivery Challans with search, filtering, and pagination.
  */
-export async function getDeliveryChallans(params: GetDeliveryChallansParams = {}) {
+export async function getDeliveryChallans(params: GetDeliveryChallansParams) {
   const {
+    firmId,
     page = 1,
     limit = 20,
     search,
@@ -203,7 +212,7 @@ export async function getDeliveryChallans(params: GetDeliveryChallansParams = {}
     sortOrder = "desc",
   } = params;
 
-  const where: Prisma.DeliveryChallanWhereInput = {};
+  const where: Prisma.DeliveryChallanWhereInput = { firmId };
 
   if (branchId) {
     where.branchId = branchId;
@@ -335,9 +344,11 @@ export async function updateChallanStatus(
     paymentAmount?: number;
     paymentMethod?: any;
     userId?: string;
-  } = {},
+    /** The caller's own firm — the challan must belong to it. */
+    firmId: string;
+  },
 ) {
-  const { note, deliveredByName, receivedByName, paymentAmount, paymentMethod, userId } = options;
+  const { note, deliveredByName, receivedByName, paymentAmount, paymentMethod, userId, firmId } = options;
 
   const challan = await prisma.deliveryChallan.findUnique({
     where: { id },
@@ -353,6 +364,9 @@ export async function updateChallanStatus(
 
   if (!challan) {
     throw new Error(`Delivery Challan #${id} not found.`);
+  }
+  if (challan.firmId !== firmId) {
+    throw new AuthorizationError("This record belongs to a different organization");
   }
 
   if (challan.status === "CANCELLED") {
@@ -376,6 +390,7 @@ export async function updateChallanStatus(
         data: {
           paymentNumber,
           branchId: challan.branchId,
+          firmId: challan.firmId,
           orderId: challan.orderId,
           amount: paymentAmount,
           method: paymentMethod || "CASH",
@@ -471,13 +486,16 @@ export async function updateChallanStatus(
 /**
  * Cancels a Delivery Challan with a required reason.
  */
-export async function cancelDeliveryChallan(id: string, reason: string, userId?: string) {
+export async function cancelDeliveryChallan(id: string, reason: string, userId: string | undefined, firmId: string) {
   const challan = await prisma.deliveryChallan.findUnique({
     where: { id },
   });
 
   if (!challan) {
     throw new Error(`Delivery Challan #${id} not found.`);
+  }
+  if (challan.firmId !== firmId) {
+    throw new AuthorizationError("This record belongs to a different organization");
   }
 
   if (challan.status === "DELIVERED") {
@@ -522,8 +540,8 @@ export async function cancelDeliveryChallan(id: string, reason: string, userId?:
 /**
  * Calculates Delivery Challan statistics for Dashboard and Module views.
  */
-export async function getChallanStats(branchId?: string) {
-  const where: Prisma.DeliveryChallanWhereInput = branchId ? { branchId } : {};
+export async function getChallanStats(firmId: string, branchId?: string) {
+  const where: Prisma.DeliveryChallanWhereInput = { firmId, ...(branchId ? { branchId } : {}) };
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

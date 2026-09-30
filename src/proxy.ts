@@ -34,7 +34,10 @@ export default auth(function proxy(request) {
 
 export const config = {
   matcher: [
-    // Everything except Next internals, the auth endpoints and static assets.
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)",
+    // Everything except Next internals, the auth endpoints, the OpenWA
+    // webhook (called by an external gateway with no session cookie —
+    // it authenticates callers with its own shared-secret check instead),
+    // and static assets.
+    "/((?!api/auth|api/whatsapp/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)",
   ],
 };

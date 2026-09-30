@@ -24,7 +24,7 @@ import {
 } from "@/lib/services/analytics";
 import { lowStockItems } from "@/lib/services/inventory";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   branchOptions,
@@ -45,12 +45,13 @@ export default async function ReportsPage({
   const user = await requirePermission(PERMISSIONS.REPORT_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params) ?? {
     from: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000),
     to: new Date(),
   };
   const tab = param(params, "tab") ?? "sales";
-  const filters = { branchId, range };
+  const filters = { firmId, branchId, range };
 
   const canSales = hasPermission(user, PERMISSIONS.REPORT_SALES);
   const canOps = hasPermission(user, PERMISSIONS.REPORT_OPERATIONS);
@@ -75,16 +76,17 @@ export default async function ReportsPage({
     canSales ? revenueSeries(filters) : Promise.resolve([]),
     canSales ? servicePerformance(filters) : Promise.resolve([]),
     hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
-      ? branchPerformance(range)
+      ? branchPerformance(firmId, range)
       : Promise.resolve([]),
     canOps ? operationsMetrics(filters) : Promise.resolve(null),
     canOps ? deliveryMetrics(filters) : Promise.resolve(null),
     canFinance ? financeMetrics(filters) : Promise.resolve(null),
-    canInventory ? lowStockItems(branchId) : Promise.resolve([]),
+    canInventory ? lowStockItems(firmId, branchId) : Promise.resolve([]),
     canInventory
       ? prisma.inventoryTransaction.groupBy({
           by: ["type"],
           where: {
+            branch: { firmId },
             ...(branchId ? { branchId } : {}),
             createdAt: { gte: range.from, lte: range.to },
           },
@@ -95,6 +97,7 @@ export default async function ReportsPage({
     canInventory
       ? prisma.purchaseOrder.findMany({
           where: {
+            firmId,
             ...(branchId ? { branchId } : {}),
             orderDate: { gte: range.from, lte: range.to },
           },
@@ -104,7 +107,7 @@ export default async function ReportsPage({
         })
       : Promise.resolve([]),
     branchOptions(user),
-    canGarments ? garmentReport(filters) : Promise.resolve(null),
+    canGarments ? garmentReport(filters, firmId) : Promise.resolve(null),
   ]);
 
   const exportQuery = new URLSearchParams({

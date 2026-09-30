@@ -6,6 +6,16 @@ import { prisma } from "@/lib/prisma";
 export interface AuditInput {
   userId?: string | null;
   branchId?: string | null;
+  /**
+   * Explicit tenant for a platform-level event (e.g. a Firms-module action)
+   * that has no branchId to derive one from. Most callers omit this —
+   * recordAudit() derives firmId from branchId itself, since a branch only
+   * ever belongs to one firm and threading firmId through every one of the
+   * ~50 call sites across the app would be both invasive and easy to miss
+   * at a few of them, the exact class of bug that left every audit entry
+   * firmless until this was added.
+   */
+  firmId?: string | null;
   action: string;
   entity: string;
   entityId?: string | null;
@@ -69,10 +79,20 @@ export async function recordAudit(input: AuditInput): Promise<void> {
       // Outside a request scope (e.g. seeding) — headers are unavailable.
     }
 
+    let firmId = input.firmId ?? null;
+    if (!firmId && input.branchId) {
+      const branch = await prisma.branch.findUnique({
+        where: { id: input.branchId },
+        select: { firmId: true },
+      });
+      firmId = branch?.firmId ?? null;
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: input.userId ?? null,
         branchId: input.branchId ?? null,
+        firmId,
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? null,

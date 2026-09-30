@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleWhatsAppWebhook } from "@/lib/services/whatsapp";
+import { handleWhatsAppWebhook, OPENWA_API_KEY } from "@/lib/services/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get("authorization") || req.headers.get("x-api-key");
-    const secret = process.env.OPENWA_API_KEY || "aurclean_secret_key";
 
-    // Validate webhook authenticity
-    if (authHeader && !authHeader.includes(secret) && authHeader !== secret) {
+    // Fail closed: with no configured secret there is nothing to verify a
+    // caller against, and a missing/mismatched header must always be
+    // rejected — never treated as implicitly trusted.
+    if (!OPENWA_API_KEY || !authHeader || !authHeader.includes(OPENWA_API_KEY)) {
       return NextResponse.json({ error: "Unauthorized webhook caller" }, { status: 401 });
     }
 

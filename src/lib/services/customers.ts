@@ -35,6 +35,7 @@ export async function upsertCustomer(
   tx: Db,
   params: {
     branchId: string;
+    firmId: string;
     details: CustomerDetails;
     createdById?: string | null;
   },
@@ -77,6 +78,7 @@ export async function upsertCustomer(
     data: {
       code: await nextCustomerCode(tx),
       branchId: params.branchId,
+      firmId: params.firmId,
       phone,
       ...contact,
       notes: params.details.notes?.trim() || null,
@@ -141,6 +143,7 @@ export type CustomerSort = "recent" | "name" | "spend" | "outstanding" | "orders
  * often has nothing but the tag in hand.
  */
 export async function listCustomers(params: {
+  firmId: string;
   branchIds: string[] | null;
   search?: string;
   sort?: CustomerSort;
@@ -154,6 +157,7 @@ export async function listCustomers(params: {
   const search = params.search?.trim();
 
   const where: Prisma.CustomerWhereInput = {
+    firmId: params.firmId,
     ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
     ...(params.onlyOutstanding ? { outstandingAmount: { gt: 0 } } : {}),
   };
@@ -227,6 +231,7 @@ export async function listCustomers(params: {
 export interface CustomerProfile {
   id: string;
   code: string;
+  firmId: string;
   branchId: string;
   branchName: string;
   name: string;
@@ -262,10 +267,11 @@ export interface CustomerProfile {
   topServices: Array<{ name: string; pieces: number }>;
 }
 
-export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
+export async function getCustomerProfile(id: string, firmId: string): Promise<CustomerProfile> {
   const normPhone = normalisePhone(id);
   const customer = await prisma.customer.findFirst({
     where: {
+      firmId,
       OR: [
         { id },
         { code: id },
@@ -322,6 +328,7 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
   return {
     id: customer.id,
     code: customer.code,
+    firmId: customer.firmId,
     branchId: customer.branchId,
     branchName: customer.branch.name,
     name: customer.name,
@@ -362,6 +369,7 @@ export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
 
 /** Type-ahead used by the order form so the counter never retypes a regular. */
 export async function searchCustomersForOrder(params: {
+  firmId: string;
   branchIds: string[] | null;
   query: string;
   limit?: number;
@@ -385,6 +393,7 @@ export async function searchCustomersForOrder(params: {
 
   const rows = await prisma.customer.findMany({
     where: {
+      firmId: params.firmId,
       isActive: true,
       ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
       OR: [

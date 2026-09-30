@@ -8,7 +8,7 @@ import { OrderForm } from "@/app/(app)/orders/new/order-form";
 import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { isGlobalRole } from "@/lib/rbac";
 
 export const metadata = { title: "New order" };
@@ -19,11 +19,12 @@ export default async function NewOrderPage({
   searchParams: Promise<{ customer?: string }>;
 }) {
   const user = await requirePermission(PERMISSIONS.ORDER_CREATE);
+  const firmId = requireFirmId(user);
   const { customer: customerId } = await searchParams;
 
   const [services, garmentTypes, branches, b2bAccounts, gstSetting] = await Promise.all([
     prisma.service.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -34,12 +35,13 @@ export default async function NewOrderPage({
       },
     }),
     prisma.garmentType.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: { id: true, name: true, category: true },
     }),
     prisma.branch.findMany({
       where: {
+        firmId,
         isActive: true,
         ...(isGlobalRole(user.role) ? {} : { id: user.branchId ?? "__none__" }),
       },
@@ -47,11 +49,11 @@ export default async function NewOrderPage({
       select: { id: true, name: true, code: true },
     }),
     prisma.b2BAccount.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       orderBy: { businessName: "asc" },
       select: { id: true, businessName: true, code: true },
     }),
-    prisma.setting.findUnique({ where: { key: "gst_rate" } }),
+    prisma.setting.findUnique({ where: { firmId_key: { firmId, key: "gst_rate" } } }),
   ]);
 
   // Arriving from a customer profile pre-fills the booking with their details.

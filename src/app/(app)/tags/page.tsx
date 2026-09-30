@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { pageParam, param, type SearchParams } from "@/lib/queries/filters";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import type { OrderStatus } from "@/generated/prisma/enums";
@@ -55,8 +55,10 @@ export default async function PrintTagsPage({
   const page = pageParam(params);
 
   const seesAllBranches = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES);
+  const firmId = requireFirmId(user);
 
   const where: Prisma.OrderWhereInput = {
+    firmId,
     ...(seesAllBranches ? {} : { branchId: user.branchId ?? "__none__" }),
     ...(printed === "never" ? { tagPrintCount: 0 } : {}),
     ...(printed === "done" ? { tagPrintCount: { gt: 0 } } : {}),
@@ -94,6 +96,7 @@ export default async function PrintTagsPage({
     prisma.order.count({ where }),
     prisma.order.count({
       where: {
+        firmId,
         ...(seesAllBranches ? {} : { branchId: user.branchId ?? "__none__" }),
         tagPrintCount: 0,
         status: { notIn: ["DELIVERED", "CANCELLED", "REFUNDED"] },

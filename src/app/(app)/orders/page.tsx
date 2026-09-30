@@ -21,7 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import {
   PAGE_SIZE,
@@ -68,6 +68,7 @@ export default async function OrdersPage({
 
   const page = pageParam(params);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params);
   const search = param(params, "q");
   const status = param(params, "status");
@@ -77,6 +78,7 @@ export default async function OrdersPage({
   const delayedOnly = param(params, "delayed") === "true";
 
   const where: Prisma.OrderWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     // "active" is the counter's word for everything still on the floor.
     ...(status === "active"
@@ -126,7 +128,7 @@ export default async function OrdersPage({
       _sum: { totalAmount: true, outstandingAmount: true },
     }),
     prisma.service.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

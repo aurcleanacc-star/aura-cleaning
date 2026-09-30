@@ -8,8 +8,10 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -35,7 +37,7 @@ export async function createCustomerAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.CUSTOMER_MANAGE);
     const input = createCustomerSchema.parse(payload);
-    requireWriteBranch(user, input.branchId);
+    await requireWriteBranch(user, input.branchId);
 
     const phone = normalisePhone(input.phone);
     const clash = await prisma.customer.findFirst({
@@ -52,6 +54,7 @@ export async function createCustomerAction(
       data: {
         code: await nextCustomerCode(),
         branchId: input.branchId,
+        firmId: requireFirmId(user),
         name: input.name,
         phone,
         email: input.email ?? null,
@@ -86,10 +89,11 @@ export async function updateCustomerAction(payload: unknown): Promise<ActionResu
 
     const customer = await prisma.customer.findUnique({
       where: { id: input.customerId },
-      select: { id: true, branchId: true, name: true, phone: true },
+      select: { id: true, branchId: true, firmId: true, name: true, phone: true },
     });
     if (!customer) throw new NotFoundError("Customer not found");
     assertBranchAccess(user, customer.branchId);
+    assertFirmAccess(user, customer.firmId);
 
     const phone = normalisePhone(input.phone);
     if (phone !== customer.phone) {
@@ -158,12 +162,14 @@ export async function deleteCustomerAction(
         name: true,
         phone: true,
         branchId: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orders: true } },
       },
     });
     if (!customer) throw new NotFoundError("Customer not found");
     assertBranchAccess(user, customer.branchId);
+    assertFirmAccess(user, customer.firmId);
 
     if (customer._count.orders > 0) {
       if (!customer.isActive) {
@@ -208,6 +214,7 @@ export async function findCustomersAction(payload: unknown) {
     const { query } = z.object({ query: z.string().trim().max(80) }).parse(payload);
 
     return searchCustomersForOrder({
+      firmId: requireFirmId(user),
       branchIds: hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
         ? null
         : user.branchId

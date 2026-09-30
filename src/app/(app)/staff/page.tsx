@@ -18,7 +18,7 @@ import { setStaffStatusAction } from "@/app/(app)/staff/actions";
 import { prisma } from "@/lib/prisma";
 import { formatDate, toInputDate, todayRange } from "@/lib/dates";
 import { PERMISSIONS, ROLE_LABELS, isGlobalRole } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   branchOptions,
@@ -57,6 +57,7 @@ export default async function StaffPage({
   const user = await requirePermission(PERMISSIONS.STAFF_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const tab = param(params, "tab") ?? "people";
   const search = param(params, "q");
   const role = param(params, "role");
@@ -65,6 +66,7 @@ export default async function StaffPage({
   const todayKey = toInputDate(today.from);
 
   const where: Prisma.UserWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(role && role !== "all" ? { role: role as UserRole } : {}),
     ...(status && status !== "all" ? { status: status as never } : {}),
@@ -109,7 +111,7 @@ export default async function StaffPage({
         orderBy: { fromDate: "asc" },
         include: { user: { select: { id: true, name: true, employeeCode: true } } },
       }),
-      prisma.user.count({ where: { status: "ACTIVE", ...(branchId ? { branchId } : {}) } }),
+      prisma.user.count({ where: { firmId, status: "ACTIVE", ...(branchId ? { branchId } : {}) } }),
       prisma.attendance.count({
         where: {
           status: { in: ["PRESENT", "HALF_DAY"] },

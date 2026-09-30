@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Eye, FileText, Plus, Printer } from "lucide-react";
 
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { getDeliveryChallans, getChallanStats } from "@/lib/services/delivery-challan";
 import { formatCurrency } from "@/lib/money";
@@ -58,10 +58,11 @@ export default async function DeliveryChallansPage({
   const paymentStatus = (param(params, "paymentStatus") ?? "ALL") as PaymentStatus | "ALL";
 
   const branchId = session.role === "SUPER_ADMIN" ? undefined : session.branchId || undefined;
+  const firmId = requireFirmId(session);
 
   const [{ challans, pagination }, stats] = await Promise.all([
-    getDeliveryChallans({ page, limit: 15, search, status, paymentStatus, branchId }),
-    getChallanStats(branchId),
+    getDeliveryChallans({ firmId, page, limit: 15, search, status, paymentStatus, branchId }),
+    getChallanStats(firmId, branchId),
   ]);
 
   const rows = challans as unknown as ChallanRow[];

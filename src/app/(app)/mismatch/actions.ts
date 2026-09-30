@@ -8,7 +8,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, authorize } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, authorize, requireFirmId } from "@/lib/session";
 import {
   BusinessRuleError,
   NotFoundError,
@@ -27,6 +27,7 @@ async function loadGarment(garmentId: string) {
       id: true,
       garmentCode: true,
       branchId: true,
+      firmId: true,
       status: true,
       currentStage: true,
       trackingCategory: true,
@@ -50,6 +51,7 @@ export async function reportMissingAction(payload: unknown): Promise<ActionResul
 
     const garment = await loadGarment(garmentId);
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     await prisma.$transaction(async (tx) => {
       await tx.garment.update({
@@ -106,6 +108,7 @@ export async function rescanGarmentAction(payload: unknown): Promise<ActionResul
 
     const garment = await loadGarment(garmentId);
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     if (garment.status === "LOST") {
       throw new BusinessRuleError(
@@ -206,9 +209,10 @@ export async function correctOrderAction(payload: unknown): Promise<ActionResult
 
     const garment = await loadGarment(garmentId);
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     const target = await prisma.order.findFirst({
-      where: { orderNumber: { equals: orderNumber, mode: "insensitive" } },
+      where: { orderNumber: { equals: orderNumber, mode: "insensitive" }, firmId: requireFirmId(user) },
       select: { id: true, orderNumber: true, branchId: true, status: true },
     });
     if (!target) throw new NotFoundError(`No order matches ${orderNumber}`);
@@ -295,6 +299,7 @@ export async function dismissMismatchAction(payload: unknown): Promise<ActionRes
 
     const garment = await loadGarment(garmentId);
     assertBranchAccess(user, garment.branchId);
+    assertFirmAccess(user, garment.firmId);
 
     await prisma.garmentException.updateMany({
       where: { garmentId: garment.id, status: "OPEN" },

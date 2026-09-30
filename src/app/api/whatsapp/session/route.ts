@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   connectWhatsAppSession,
@@ -16,11 +16,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 
-    const session = await getWhatsAppStatus({ forceRefresh });
+    const session = await getWhatsAppStatus(requireFirmId(user), { forceRefresh });
     return NextResponse.json({ ok: true, data: session });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch session status";
@@ -35,22 +35,24 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const firmId = requireFirmId(user);
     const body = await req.json().catch(() => ({}));
     const action = body?.action || "connect";
 
     let session;
     if (action === "disconnect") {
-      session = await disconnectWhatsAppSession();
+      session = await disconnectWhatsAppSession(firmId);
     } else if (action === "reconnect") {
-      session = await reconnectWhatsAppSession();
+      session = await reconnectWhatsAppSession(firmId);
     } else if (action === "refresh") {
-      session = await getWhatsAppStatus({ forceRefresh: true });
+      session = await getWhatsAppStatus(firmId, { forceRefresh: true });
     } else if (action === "test") {
       const phone = body?.phone;
       if (!phone) {
         return NextResponse.json({ ok: false, error: "Phone number required for test" }, { status: 400 });
       }
       const testRes = await sendWhatsAppMessage({
+        firmId,
         phone,
         messageType: "CUSTOM",
         messageText: "Test WhatsApp message from AURCLEAN Laundry ERP. Gateway connection verified successfully!",
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ ok: true, data: testRes });
     } else {
-      session = await connectWhatsAppSession();
+      session = await connectWhatsAppSession(firmId);
     }
 
     return NextResponse.json({ ok: true, data: session });

@@ -21,7 +21,7 @@ import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { lowStockItems } from "@/lib/services/inventory";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   branchOptions,
@@ -86,6 +86,7 @@ export default async function InventoryPage({
   const user = await requirePermission(PERMISSIONS.INVENTORY_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const tab = param(params, "tab") ?? "stock";
   const search = param(params, "q");
   const category = param(params, "category");
@@ -93,6 +94,7 @@ export default async function InventoryPage({
   const stockWhere: Prisma.InventoryStockWhereInput = {
     ...(branchId ? { branchId } : {}),
     item: {
+      firmId,
       isActive: true,
       ...(category && category !== "all" ? { category: category as never } : {}),
       ...(search
@@ -117,7 +119,7 @@ export default async function InventoryPage({
       },
     }),
     prisma.inventoryTransaction.findMany({
-      where: { ...(branchId ? { branchId } : {}) },
+      where: { item: { firmId }, ...(branchId ? { branchId } : {}) },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -127,14 +129,14 @@ export default async function InventoryPage({
       },
     }),
     prisma.inventoryItem.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, sku: true, unit: true },
     }),
     branchOptions(user),
-    lowStockItems(branchId),
+    lowStockItems(firmId, branchId),
     prisma.inventoryStock.findMany({
-      where: { ...(branchId ? { branchId } : {}) },
+      where: { item: { firmId }, ...(branchId ? { branchId } : {}) },
       include: { item: { select: { costPrice: true } } },
     }),
   ]);

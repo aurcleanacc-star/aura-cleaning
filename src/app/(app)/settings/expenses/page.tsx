@@ -19,7 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   branchOptions,
@@ -66,12 +66,14 @@ export default async function ExpensesPage({
   const user = await requirePermission(PERMISSIONS.EXPENSE_VIEW);
 
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const range = dateRangeFrom(params);
   const category = param(params, "category");
   const status = param(params, "status");
   const search = param(params, "q");
 
   const where: Prisma.ExpenseWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(category && category !== "all" ? { category: category as never } : {}),
     ...(status && status !== "all" ? { status: status as never } : {}),
@@ -102,7 +104,7 @@ export default async function ExpensesPage({
       _sum: { amount: true },
     }),
     prisma.expense.count({
-      where: { ...(branchId ? { branchId } : {}), status: "PENDING" },
+      where: { firmId, ...(branchId ? { branchId } : {}), status: "PENDING" },
     }),
     branchOptions(user),
   ]);

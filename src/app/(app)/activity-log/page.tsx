@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listAuditLogs } from "@/lib/services/audit-log";
 import { ActivityLogView } from "./activity-log-view";
 
@@ -12,8 +12,9 @@ export default async function ActivityLogPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
-  const logs = await listAuditLogs({ branchId, limit: 200 });
+  const logs = await listAuditLogs({ firmId, branchId, limit: 200 });
 
   return (
     <div className="space-y-5">

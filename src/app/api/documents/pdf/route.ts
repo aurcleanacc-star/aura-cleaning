@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/session";
+import { assertFirmAccess, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
+import { prisma } from "@/lib/prisma";
 import {
   generateInvoicePDF,
   generateChallanPDF,
@@ -17,7 +18,7 @@ import {
  */
 export async function GET(req: Request) {
   try {
-    await requirePermission([
+    const user = await requirePermission([
       PERMISSIONS.ORDER_VIEW,
       PERMISSIONS.DELIVERY_VIEW,
       PERMISSIONS.BILLING_VIEW,
@@ -34,6 +35,30 @@ export async function GET(req: Request) {
     }
 
     const normalizedType = type.toLowerCase().replace("delivery_challan", "challan").replace("payment_receipt", "payment_receipt").replace("expense_receipt", "expense");
+
+    // The id is a raw query-string value, so its owning firm must be
+    // verified before any document is generated from it — otherwise any
+    // signed-in user could pull another firm's invoice/challan/etc. just by
+    // guessing or enumerating ids.
+    const firmLookup: Record<string, () => Promise<{ firmId: string } | null>> = {
+      invoice: () => prisma.invoice.findUnique({ where: { id }, select: { firmId: true } }),
+      challan: () => prisma.deliveryChallan.findUnique({ where: { id }, select: { firmId: true } }),
+      payment_receipt: () => prisma.payment.findUnique({ where: { id }, select: { firmId: true } }),
+      delivery_receipt: () => prisma.delivery.findUnique({ where: { id }, select: { firmId: true } }),
+      order_summary: () => prisma.order.findUnique({ where: { id }, select: { firmId: true } }),
+      statement: () => prisma.customer.findUnique({ where: { id }, select: { firmId: true } }),
+      expense: () => prisma.expense.findUnique({ where: { id }, select: { firmId: true } }),
+    };
+
+    const lookup = firmLookup[normalizedType];
+    if (!lookup) {
+      return NextResponse.json({ error: `Unsupported document type: ${type}` }, { status: 400 });
+    }
+    const record = await lookup();
+    if (!record) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    }
+    assertFirmAccess(user, record.firmId);
 
     let pdfResult: { buffer: Buffer; fileName: string };
 

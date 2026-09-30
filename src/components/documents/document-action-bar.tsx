@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { sendDocumentWhatsAppAction } from "@/app/api/documents/actions";
+import { formatWhatsAppPhone } from "@/lib/whatsapp-templates";
 import type { DocumentType } from "@/lib/pdf/types";
 
 interface DocumentActionBarProps {
@@ -55,9 +56,7 @@ export function DocumentActionBar({
         toast.success(`PDF document ${res.fileName} sent to ${customerPhone} via WhatsApp!`);
       } else {
         setStatusStep("Gateway unavailable");
-        const formattedPhoneDigits = (customerPhone || "").replace(/\D/g, "");
-        const cleanPhone = formattedPhoneDigits.length === 10 ? `91${formattedPhoneDigits}` : formattedPhoneDigits;
-        const fallbackUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${customerName || 'Customer'},\n\nPlease find your ${documentType.replace(/_/g, " ")} #${documentNumber} attached.\n\nThank you,\nAURCLEAN`)}`;
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone || "")}?text=${encodeURIComponent(`Hello ${customerName || 'Customer'},\n\nPlease find your ${documentType.replace(/_/g, " ")} #${documentNumber} attached.\n\nThank you.`)}`;
 
         toast.error("OpenWA Gateway Server Unavailable", {
           description: "Click below to send via WhatsApp Web / App directly",

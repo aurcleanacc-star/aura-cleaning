@@ -67,8 +67,7 @@ export interface TagSheet {
 }
 
 export async function getTagSheet(orderId: string): Promise<TagSheet> {
-  const [order, appName] = await Promise.all([
-    prisma.order.findUnique({
+  const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
         branch: {
@@ -108,11 +107,16 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
           },
         },
       },
-    }),
-    prisma.setting.findUnique({ where: { key: "app_name" } }),
-  ]);
+    });
 
   if (!order) throw new NotFoundError("Order not found");
+
+  const [appName, firm] = await Promise.all([
+    prisma.setting.findUnique({
+      where: { firmId_key: { firmId: order.firmId, key: "app_name" } },
+    }),
+    prisma.firm.findUnique({ where: { id: order.firmId }, select: { name: true } }),
+  ]);
 
   const branchAddress = [order.branch.addressLine, order.branch.city, order.branch.pincode]
     .filter(Boolean)
@@ -123,7 +127,7 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
     orderNumber: order.orderNumber,
     orderQr: buildOrderQrPayload(order.orderNumber),
     orderBarcode: buildBarcodeValue(order.orderNumber),
-    businessName: appName?.value ?? "AURCLEAN Laundry ERP",
+    businessName: appName?.value || firm?.name || "",
     branchName: order.branch.name,
     branchCode: order.branch.code,
     branchPhone: order.branch.phone,

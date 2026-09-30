@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { STAGE_LABELS } from "@/lib/workflow";
 import { humanize } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ export default async function ServiceDetailPage({
 
   const [service, recentOrders, pieceCount] = await Promise.all([
     prisma.service.findFirst({
-      where: { OR: [{ id }, { code: id }] },
+      where: { firmId: requireFirmId(user), OR: [{ id }, { code: id }] },
       include: {
         rates: {
           include: { garmentType: { select: { name: true } } },

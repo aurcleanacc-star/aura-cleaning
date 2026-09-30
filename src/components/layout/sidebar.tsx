@@ -14,6 +14,7 @@ import type { UserRole } from "@/generated/prisma/enums";
 
 interface SidebarProps {
   permissions: PermissionCode[];
+  platformOnly?: boolean;
   open: boolean;
   onClose: () => void;
   user: { name: string; email: string; role: UserRole; branchName: string | null };
@@ -24,9 +25,9 @@ function isActive(pathname: string, item: NavItem) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
+export function Sidebar({ permissions, platformOnly, open, onClose, user }: SidebarProps) {
   const pathname = usePathname();
-  const sections = visibleSections(permissions);
+  const sections = visibleSections(permissions, platformOnly);
 
   return (
     <>

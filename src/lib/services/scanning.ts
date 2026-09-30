@@ -15,6 +15,9 @@ const DUPLICATE_WINDOW_MS = 90 * 1000;
 export interface ScannedGarmentCard {
   garmentId: string;
   garmentCode: string;
+  /** The garment's own branch — used to attribute the scan event when the
+   *  operator (e.g. a firm-wide admin) has no fixed branch of their own. */
+  branchId: string;
   categoryLabel: string;
   categoryEmoji: string;
   garmentTypeName: string;
@@ -107,6 +110,7 @@ function toCard(garment: GarmentWithCard, warning: string | null = null): Scanne
   return {
     garmentId: garment.id,
     garmentCode: garment.garmentCode,
+    branchId: garment.branchId,
     categoryLabel: meta.label,
     categoryEmoji: meta.emoji,
     garmentTypeName: garment.garmentType.name,
@@ -239,7 +243,11 @@ export async function resolveGarmentScan(params: {
    *  that turns up on a *different* order is the mismatch case. */
   contextOrderId?: string | null;
   branchIds: string[] | null;
-  branchId: string;
+  /** The operator's own branch, when they have one. A firm-wide admin with
+   *  no fixed branch (branchIds === null, above) has none — the scan is then
+   *  attributed to the garment's own branch instead, once it's resolved. */
+  branchId: string | null;
+  firmId: string;
   userId: string;
 }): Promise<ScanResult> {
   const code = params.rawCode.trim();
@@ -255,7 +263,9 @@ export async function resolveGarmentScan(params: {
   }
 
   const parsed = parseScan(code);
-  const branchWhere = params.branchIds ? { branchId: { in: params.branchIds } } : {};
+  const branchWhere = params.branchIds
+    ? { branchId: { in: params.branchIds }, firmId: params.firmId }
+    : { firmId: params.firmId };
 
   let garment: GarmentWithCard | null = null;
 
@@ -419,7 +429,7 @@ export async function resolveGarmentScan(params: {
   await recordGarmentScan(prisma, {
     garmentId: garment.id,
     stage: garment.currentStage,
-    branchId: params.branchId,
+    branchId: params.branchId ?? garment.branchId,
     userId: params.userId,
     contextOrderId: garment.orderId,
     note: "Scanned at the scan workspace",
@@ -440,19 +450,27 @@ export async function resolveGarmentScan(params: {
 }
 
 export async function logScan(params: {
-  branchId: string;
+  /** Null for a firm-wide admin with no fixed branch, scanning a code that
+   *  didn't resolve to a garment — there is then no branch to attribute the
+   *  event to, so it's skipped rather than failing the whole scan action. */
+  branchId: string | null;
+  firmId: string;
   rawCode: string;
   result: ScanResult;
   source: ScanSource;
   userId: string;
   action?: string | null;
 }): Promise<void> {
+  const branchId = params.branchId ?? params.result.garment?.branchId ?? null;
+  if (!branchId) return;
+
   const orderId = params.result.garment?.orderId ?? params.result.mismatch?.actualOrderId ?? null;
   const garmentCode = params.result.garment?.garmentCode ?? params.result.mismatch?.garmentCode ?? null;
 
   await prisma.scanEvent.create({
     data: {
-      branchId: params.branchId,
+      branchId,
+      firmId: params.firmId,
       rawCode: params.rawCode.slice(0, 200),
       resolvedAs: garmentCode ? "GARMENT" : "UNKNOWN",
       orderId,
@@ -483,6 +501,7 @@ export interface ScanHistoryRow {
 }
 
 export async function listScanHistory(params: {
+  firmId: string;
   branchIds: string[] | null;
   limit?: number;
   onlyFailures?: boolean;
@@ -491,6 +510,7 @@ export async function listScanHistory(params: {
   const search = params.search?.trim();
   const rows = await prisma.scanEvent.findMany({
     where: {
+      firmId: params.firmId,
       ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
       ...(params.onlyFailures ? { succeeded: false } : {}),
       ...(search

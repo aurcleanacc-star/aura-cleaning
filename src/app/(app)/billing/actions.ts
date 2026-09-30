@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import { cuidSchema } from "@/lib/validations/common";
-import { assertBranchAccess, authorize } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, authorize, requireFirmId } from "@/lib/session";
 import {
   BusinessRuleError,
   NotFoundError,
@@ -51,6 +51,7 @@ export async function recordPaymentAction(
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         orderNumber: true,
         status: true,
         totalAmount: true,
@@ -62,6 +63,7 @@ export async function recordPaymentAction(
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     if (["CANCELLED", "REFUNDED"].includes(order.status)) {
       throw new BusinessRuleError("This order is closed — no further payments can be taken");
@@ -84,6 +86,7 @@ export async function recordPaymentAction(
         data: {
           paymentNumber: await nextPaymentNumber(tx),
           branchId: order.branchId,
+          firmId: order.firmId,
           orderId: order.id,
           invoiceId: invoice?.id ?? null,
           amount: input.amount,
@@ -149,6 +152,7 @@ export async function refundAction(
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         orderNumber: true,
         paidAmount: true,
         refundedAmount: true,
@@ -156,6 +160,7 @@ export async function refundAction(
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     const refundable = round2(num(order.paidAmount) - num(order.refundedAmount));
     if (input.amount > refundable) {
@@ -244,6 +249,7 @@ export async function createPaymentIntentAction(
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         orderNumber: true,
         outstandingAmount: true,
         customerName: true,
@@ -253,6 +259,7 @@ export async function createPaymentIntentAction(
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     if (input.amount > num(order.outstandingAmount)) {
       throw new BusinessRuleError("That is more than the outstanding balance");
@@ -290,10 +297,11 @@ export async function verifyOnlinePaymentAction(
 
     const order = await prisma.order.findUnique({
       where: { id: input.orderId },
-      select: { id: true, branchId: true, orderNumber: true, outstandingAmount: true },
+      select: { id: true, branchId: true, firmId: true, orderNumber: true, outstandingAmount: true },
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     const gateway = getPaymentGateway();
     const verification = await gateway.verify({
@@ -331,6 +339,7 @@ export async function verifyOnlinePaymentAction(
         data: {
           paymentNumber: await nextPaymentNumber(tx),
           branchId: order.branchId,
+          firmId: order.firmId,
           orderId: order.id,
           invoiceId: invoice?.id ?? null,
           amount: input.amount,
@@ -364,9 +373,11 @@ export async function verifyOnlinePaymentAction(
 export async function sendPaymentRemindersAction(): Promise<ActionResult<{ sent: number }>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.NOTIFICATION_MANAGE);
+    const firmId = requireFirmId(user);
 
     const orders = await prisma.order.findMany({
       where: {
+        firmId,
         outstandingAmount: { gt: 0 },
         status: { notIn: ["CANCELLED", "REFUNDED"] },
         expectedDeliveryAt: { lt: new Date() },
@@ -439,6 +450,7 @@ export async function voidPaymentAction(
         id: true,
         paymentNumber: true,
         branchId: true,
+        firmId: true,
         orderId: true,
         amount: true,
         state: true,
@@ -447,6 +459,7 @@ export async function voidPaymentAction(
     });
     if (!payment) throw new NotFoundError("Payment not found");
     assertBranchAccess(user, payment.branchId);
+    assertFirmAccess(user, payment.firmId);
 
     if (payment.state !== "CAPTURED") {
       throw new BusinessRuleError(

@@ -13,7 +13,7 @@ import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { buildOrderQrPayload } from "@/lib/codes";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, requirePermission } from "@/lib/session";
 
 export const metadata = { title: "Invoice" };
 
@@ -43,6 +43,7 @@ export default async function InvoicePage({
 
   if (!invoice) notFound();
   assertBranchAccess(user, invoice.branchId);
+  assertFirmAccess(user, invoice.firmId);
 
   const gstTotal =
     num(invoice.cgstAmount) + num(invoice.sgstAmount) + num(invoice.igstAmount);

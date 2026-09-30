@@ -12,7 +12,7 @@ import { NewComplaintDialog } from "@/app/(app)/complaints/complaint-dialogs";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   PAGE_SIZE,
@@ -51,12 +51,14 @@ export default async function ComplaintsPage({
 
   const page = pageParam(params);
   const branchId = scopedBranchId(user, params);
+  const firmId = requireFirmId(user);
   const search = param(params, "q");
   const status = param(params, "status");
   const type = param(params, "type");
   const priority = param(params, "priority");
 
   const where: Prisma.ComplaintWhereInput = {
+    firmId,
     ...(branchId ? { branchId } : {}),
     ...(status && status !== "all" ? { status: status as never } : {}),
     ...(type && type !== "all" ? { type: type as never } : {}),
@@ -90,23 +92,26 @@ export default async function ComplaintsPage({
       prisma.complaint.count({ where }),
       prisma.complaint.count({
         where: {
+          firmId,
           status: { in: ["OPEN", "UNDER_INVESTIGATION"] },
           ...(branchId ? { branchId } : {}),
         },
       }),
       prisma.complaint.count({
         where: {
+          firmId,
           priority: "CRITICAL",
           status: { notIn: ["RESOLVED", "CLOSED", "REJECTED"] },
           ...(branchId ? { branchId } : {}),
         },
       }),
       prisma.complaint.count({
-        where: { status: "RESOLVED", ...(branchId ? { branchId } : {}) },
+        where: { firmId, status: "RESOLVED", ...(branchId ? { branchId } : {}) },
       }),
       branchOptions(user),
       prisma.user.findMany({
         where: {
+          firmId,
           status: "ACTIVE",
           role: { in: ["SUPER_ADMIN", "MANAGER"] },
           ...(branchId ? { branchId } : {}),

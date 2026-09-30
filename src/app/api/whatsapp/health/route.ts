@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireFirmId, requirePermission } from "@/lib/session";
+import { PERMISSIONS } from "@/lib/rbac";
 import { getWhatsAppStatus } from "@/lib/services/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +11,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    const health = await getWhatsAppStatus({ forceRefresh: true });
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const health = await getWhatsAppStatus(requireFirmId(user), { forceRefresh: true });
     const status = health.erpOk && health.openWaOk ? 200 : 503;
     return NextResponse.json(health, { status });
   } catch (error) {

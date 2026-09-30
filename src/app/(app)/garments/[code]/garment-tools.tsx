@@ -121,12 +121,12 @@ export function GarmentTools({
     startTransition(async () => {
       const result = await advanceGarmentAction({
         garmentId,
-        stage: currentStage,
+        stage: nextStage.stage,
         outcome: "COMPLETED",
         scannedVia: "garment page",
       });
       if (result.ok) {
-        toast.success(`${garmentCode} cleared ${currentStage.replace(/_/g, " ").toLowerCase()}`);
+        toast.success(`${garmentCode} cleared ${nextStage.stage.replace(/_/g, " ").toLowerCase()}`);
         if (result.data.mismatchAlert) toast.error(result.data.mismatchAlert);
         signalDataChange();
         router.refresh();

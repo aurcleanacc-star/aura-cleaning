@@ -21,7 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDateTime, formatTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 import { CancelDeliveryButton } from "@/app/(app)/delivery/delivery-row-actions";
@@ -69,6 +69,7 @@ export default async function DeliveryDetailPage({
 
   if (!delivery) notFound();
   assertBranchAccess(user, delivery.branchId);
+  assertFirmAccess(user, delivery.firmId);
 
   const timeline: TimelineEntry[] = [
     {

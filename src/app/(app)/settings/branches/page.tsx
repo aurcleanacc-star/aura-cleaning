@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { BranchDialog } from "@/app/(app)/settings/settings-dialogs";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 export const metadata = { title: "Branches" };
@@ -45,8 +45,10 @@ interface BranchRow {
 export default async function BranchesPage() {
   const user = await requirePermission(PERMISSIONS.BRANCH_VIEW);
   const canManage = hasPermission(user, PERMISSIONS.BRANCH_MANAGE);
+  const firmId = requireFirmId(user);
 
   const branches = await prisma.branch.findMany({
+    where: { firmId },
     orderBy: [{ type: "asc" }, { name: "asc" }],
     include: {
       parent: { select: { name: true } },

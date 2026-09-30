@@ -9,8 +9,10 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -54,7 +56,7 @@ export async function createOrderAction(
     }
 
     const input = createOrderSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.discountAmount > 0 && !hasPermission(user, PERMISSIONS.ORDER_APPLY_DISCOUNT)) {
       throw new BusinessRuleError("You are not allowed to apply discounts");
@@ -66,6 +68,7 @@ export async function createOrderAction(
         userId: user.id,
         userName: user.name,
         branchId,
+        firmId: requireFirmId(user),
         canOverridePrice: hasPermission(user, PERMISSIONS.ORDER_OVERRIDE_PRICE),
       },
     );
@@ -100,6 +103,7 @@ export async function updateOrderAction(payload: unknown): Promise<ActionResult<
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         status: true,
         orderNumber: true,
         customerName: true,
@@ -109,6 +113,7 @@ export async function updateOrderAction(payload: unknown): Promise<ActionResult<
     });
     if (!existing) throw new NotFoundError("Order not found");
     assertBranchAccess(user, existing.branchId);
+    assertFirmAccess(user, existing.firmId);
 
     if (["CANCELLED", "REFUNDED"].includes(existing.status)) {
       throw new BusinessRuleError("A cancelled order can no longer be edited");
@@ -157,6 +162,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       where: { id: input.orderId },
       select: {
         id: true,
+        firmId: true,
         branchId: true,
         status: true,
         orderNumber: true,
@@ -167,6 +173,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       },
     });
     if (!order) throw new NotFoundError("Order not found");
+    assertFirmAccess(user, order.firmId);
     assertBranchAccess(user, order.branchId);
 
     if (!canTransition(order.status, input.status)) {
@@ -177,7 +184,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
 
     if (input.status === "DELIVERED" && num(order.outstandingAmount) > 0) {
       const policy = await prisma.setting.findUnique({
-        where: { key: "require_full_payment_before_delivery" },
+        where: { firmId_key: { firmId: order.firmId, key: "require_full_payment_before_delivery" } },
       });
       if (policy?.value === "true") {
         throw new BusinessRuleError(
@@ -190,7 +197,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       setOrderStatus(tx, {
         orderId: order.id,
         status: input.status,
-        actor: { userId: user.id, userName: user.name, branchId: order.branchId },
+        actor: { userId: user.id, userName: user.name, branchId: order.branchId, firmId: order.firmId },
         note: input.note ?? "Status changed manually",
       }),
     );
@@ -235,6 +242,7 @@ export async function cancelOrderAction(payload: unknown): Promise<ActionResult<
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         status: true,
         orderNumber: true,
         paidAmount: true,
@@ -244,6 +252,7 @@ export async function cancelOrderAction(payload: unknown): Promise<ActionResult<
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     if (["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status)) {
       throw new BusinessRuleError(
@@ -339,6 +348,7 @@ export async function applyDiscountAction(payload: unknown): Promise<ActionResul
       select: {
         id: true,
         branchId: true,
+        firmId: true,
         orderNumber: true,
         subtotal: true,
         gstRate: true,
@@ -348,6 +358,7 @@ export async function applyDiscountAction(payload: unknown): Promise<ActionResul
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
     if (["CANCELLED", "REFUNDED", "DELIVERED"].includes(order.status)) {
       throw new BusinessRuleError("This order is closed and its pricing cannot change");
     }
@@ -399,10 +410,11 @@ export async function rewashOrderAction(
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, branchId: true, orderNumber: true, status: true },
+      select: { id: true, branchId: true, firmId: true, orderNumber: true, status: true },
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
     if (["CANCELLED", "REFUNDED"].includes(order.status)) {
       throw new BusinessRuleError("This order is closed");
     }
@@ -457,7 +469,7 @@ export async function rewashOrderAction(
       await setOrderStatus(tx, {
         orderId: order.id,
         status: "WASHING",
-        actor: { userId: user.id, userName: user.name, branchId: order.branchId },
+        actor: { userId: user.id, userName: user.name, branchId: order.branchId, firmId: order.firmId },
         note: `Rewash requested: ${reason}`,
       });
 

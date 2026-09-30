@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { getFinancialOverview } from "@/lib/services/accounting";
 import { FinanceOverviewView } from "./finance-overview";
 
@@ -13,7 +13,7 @@ export default async function FinanceOverviewPage() {
     ? undefined
     : user.branchId ?? undefined;
 
-  const metrics = await getFinancialOverview(branchId);
+  const metrics = await getFinancialOverview(requireFirmId(user), branchId);
 
   return (
     <div className="space-y-5">

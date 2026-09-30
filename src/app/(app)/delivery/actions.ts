@@ -11,6 +11,7 @@ import { PERMISSIONS } from "@/lib/rbac";
 import { cuidSchema } from "@/lib/validations/common";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
   hasPermission,
 } from "@/lib/session";
@@ -48,6 +49,7 @@ export async function createDeliveryAction(
       where: { id: input.orderId },
       select: {
         id: true,
+        firmId: true,
         branchId: true,
         orderNumber: true,
         status: true,
@@ -56,6 +58,7 @@ export async function createDeliveryAction(
       },
     });
     if (!order) throw new NotFoundError("Order not found");
+    assertFirmAccess(user, order.firmId);
     assertBranchAccess(user, order.branchId);
 
     if (["CANCELLED", "REFUNDED", "DELIVERED"].includes(order.status)) {
@@ -67,6 +70,7 @@ export async function createDeliveryAction(
         deliveryNumber: await nextDeliveryNumber(),
         orderId: order.id,
         branchId: order.branchId,
+        firmId: order.firmId,
         status: input.driverId ? "DRIVER_ASSIGNED" : "PENDING",
         driverId: input.driverId ?? null,
         assignedAt: input.driverId ? new Date() : null,
@@ -142,10 +146,11 @@ export async function assignDriverAction(payload: unknown): Promise<ActionResult
     } else {
       const delivery = await prisma.delivery.findUnique({
         where: { id: input.jobId },
-        select: { id: true, branchId: true, deliveryNumber: true, status: true },
+        select: { id: true, branchId: true, firmId: true, deliveryNumber: true, status: true },
       });
       if (!delivery) throw new NotFoundError("Delivery not found");
       assertBranchAccess(user, delivery.branchId);
+      assertFirmAccess(user, delivery.firmId);
       if (["DELIVERED", "CANCELLED"].includes(delivery.status)) {
         throw new BusinessRuleError("This delivery can no longer be reassigned");
       }
@@ -255,6 +260,7 @@ export async function dispatchDeliveryAction(payload: unknown): Promise<ActionRe
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     const isDispatcher = hasPermission(user, PERMISSIONS.DELIVERY_MANAGE);
     if (!isDispatcher && delivery.driver?.userId !== user.id) {
@@ -287,7 +293,7 @@ export async function dispatchDeliveryAction(payload: unknown): Promise<ActionRe
           fromStatus: garment.status,
           toStatus: "OUT_FOR_DELIVERY",
           stage: "DISPATCH",
-          actor: { userId: user.id, userName: user.name, branchId: delivery.branchId },
+          actor: { userId: user.id, userName: user.name, branchId: delivery.branchId, firmId: delivery.firmId },
           note: `Loaded onto ${delivery.deliveryNumber}`,
         });
       }
@@ -295,7 +301,7 @@ export async function dispatchDeliveryAction(payload: unknown): Promise<ActionRe
       await setOrderStatus(tx, {
         orderId: delivery.orderId,
         status: "OUT_FOR_DELIVERY",
-        actor: { userId: user.id, userName: user.name, branchId: delivery.branchId },
+        actor: { userId: user.id, userName: user.name, branchId: delivery.branchId, firmId: delivery.firmId },
         note: `Dispatched on ${delivery.deliveryNumber}`,
       });
     });
@@ -357,6 +363,7 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     const isDispatcher = hasPermission(user, PERMISSIONS.DELIVERY_MANAGE);
     if (!isDispatcher && delivery.driver?.userId !== user.id) {
@@ -414,6 +421,7 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
           data: {
             paymentNumber: await nextPaymentNumber(tx),
             branchId: delivery.branchId,
+            firmId: delivery.firmId,
             orderId: delivery.orderId,
             invoiceId: invoice?.id ?? null,
             amount: input.amountCollected,
@@ -443,7 +451,7 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
             fromStatus: garment.status,
             toStatus: "DELIVERED",
             stage: "DISPATCH",
-            actor: { userId: user.id, userName: user.name, branchId: delivery.branchId },
+            actor: { userId: user.id, userName: user.name, branchId: delivery.branchId, firmId: delivery.firmId },
             note: `Delivered on ${delivery.deliveryNumber}`,
             extraData: { deliveredAt: now },
           });
@@ -462,12 +470,13 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
           userId: user.id,
           userName: user.name,
           branchId: delivery.branchId,
+          firmId: delivery.firmId,
         });
       } else {
         await setOrderStatus(tx, {
           orderId: delivery.orderId,
           status: "READY",
-          actor: { userId: user.id, userName: user.name, branchId: delivery.branchId },
+          actor: { userId: user.id, userName: user.name, branchId: delivery.branchId, firmId: delivery.firmId },
           note: `Delivery attempt failed: ${input.failureReason ?? "no reason given"}`,
         });
       }
@@ -523,12 +532,14 @@ export async function cancelDeliveryAction(payload: unknown): Promise<ActionResu
         id: true,
         deliveryNumber: true,
         branchId: true,
+        firmId: true,
         orderId: true,
         status: true,
       },
     });
     if (!delivery) throw new NotFoundError("Delivery not found");
     assertBranchAccess(user, delivery.branchId);
+    assertFirmAccess(user, delivery.firmId);
 
     if (delivery.status === "DELIVERED") {
       throw new BusinessRuleError(

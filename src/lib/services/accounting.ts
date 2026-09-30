@@ -31,7 +31,10 @@ export interface FinancialOverviewMetrics {
  * Computes centralized real-time financial metrics from transaction data.
  * No separate formulas or hardcoded numbers — everything rolls up from active ledgers & accounts.
  */
-export async function getFinancialOverview(branchId?: string): Promise<FinancialOverviewMetrics> {
+export async function getFinancialOverview(
+  firmId: string,
+  branchId?: string,
+): Promise<FinancialOverviewMetrics> {
   const today = todayRange();
   const branchWhere = branchId ? { branchId } : {};
 
@@ -47,6 +50,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
   ] = await Promise.all([
     prisma.order.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         status: { notIn: ["CANCELLED", "REFUNDED"] },
       },
@@ -54,33 +58,37 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
     }),
     prisma.expense.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         status: { in: ["APPROVED", "PAID"] },
       },
       _sum: { amount: true },
     }),
     prisma.cashAccount.findFirst({
-      where: branchId ? { branchId } : {},
+      where: { branch: { firmId }, ...(branchId ? { branchId } : {}) },
     }),
     prisma.bankAccount.findMany({
       where: {
+        firmId,
         ...(branchId ? { branchId } : {}),
         status: "ACTIVE",
       },
       select: { currentBalance: true },
     }),
     prisma.customer.aggregate({
-      where: branchId ? { branchId } : {},
+      where: { firmId, ...(branchId ? { branchId } : {}) },
       _sum: { outstandingAmount: true },
     }),
     prisma.purchaseInvoice.findMany({
       where: {
+        supplier: { firmId },
         status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] },
       },
       select: { total: true, amountPaid: true },
     }),
     prisma.payment.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         state: "CAPTURED",
         paidAt: { gte: today.from, lte: today.to },
@@ -89,6 +97,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
     }),
     prisma.financialLedger.aggregate({
       where: {
+        firmId,
         ...branchWhere,
         entryDate: { gte: today.from, lte: today.to },
         debit: { gt: 0 },
@@ -130,6 +139,7 @@ export async function getFinancialOverview(branchId?: string): Promise<Financial
 
 export interface PostLedgerInput {
   branchId: string;
+  firmId: string;
   reference: string;
   description: string;
   accountCategory: FinancialAccountCategory;
@@ -178,6 +188,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
       await tx.cashTransaction.create({
         data: {
           branchId: input.branchId,
+          firmId: input.firmId,
           type: cashDelta >= 0 ? "CASH_IN" : "CASH_OUT",
           amount: Math.abs(cashDelta),
           balanceAfter: cashBalanceAfter,
@@ -194,6 +205,9 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
       const bank = await tx.bankAccount.findUnique({
         where: { id: input.bankAccountId },
       });
+      if (bank && bank.firmId !== input.firmId) {
+        throw new Error("Bank account not found");
+      }
       if (bank) {
         const bankDelta = credit - debit;
         bankBalanceAfter = round2(num(bank.currentBalance) + bankDelta);
@@ -222,6 +236,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
     const ledger = await tx.financialLedger.create({
       data: {
         branchId: input.branchId,
+        firmId: input.firmId,
         reference: input.reference,
         description: input.description,
         accountCategory: input.accountCategory,
@@ -249,6 +264,7 @@ export async function postFinancialTransaction(input: PostLedgerInput) {
  */
 export async function transferCashBank(params: {
   branchId: string;
+  firmId: string;
   bankAccountId: string;
   amount: number;
   direction: "CASH_TO_BANK" | "BANK_TO_CASH";
@@ -260,7 +276,7 @@ export async function transferCashBank(params: {
 
   return await prisma.$transaction(async (tx) => {
     const bank = await tx.bankAccount.findUnique({ where: { id: params.bankAccountId } });
-    if (!bank) throw new Error("Bank account not found");
+    if (!bank || bank.firmId !== params.firmId) throw new Error("Bank account not found");
 
     const cash = await tx.cashAccount.upsert({
       where: { branchId: params.branchId },
@@ -281,6 +297,7 @@ export async function transferCashBank(params: {
       await tx.cashTransaction.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           type: "DEPOSIT_TO_BANK",
           amount,
           balanceAfter: newCashBal,
@@ -306,6 +323,7 @@ export async function transferCashBank(params: {
       await tx.financialLedger.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           reference: ref,
           description: `Cash Deposit -> ${bank.bankName} (${bank.accountName})`,
           accountCategory: "TRANSFER",
@@ -343,6 +361,7 @@ export async function transferCashBank(params: {
       await tx.cashTransaction.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           type: "WITHDRAWAL_FROM_BANK",
           amount,
           balanceAfter: newCashBal,
@@ -355,6 +374,7 @@ export async function transferCashBank(params: {
       await tx.financialLedger.create({
         data: {
           branchId: params.branchId,
+          firmId: params.firmId,
           reference: ref,
           description: `Bank Withdrawal -> Cash in Hand (${bank.bankName})`,
           accountCategory: "TRANSFER",
@@ -373,6 +393,7 @@ export async function transferCashBank(params: {
 }
 
 export interface LedgerQueryFilters {
+  firmId: string;
   branchId?: string;
   category?: FinancialAccountCategory;
   search?: string;
@@ -407,6 +428,7 @@ export async function listLedgerEntries(filters: LedgerQueryFilters): Promise<{
 
   const entries = await prisma.financialLedger.findMany({
     where: {
+      firmId: filters.firmId,
       ...branchWhere,
       ...(filters.category ? { accountCategory: filters.category } : {}),
       ...(filters.from || filters.to
@@ -467,10 +489,12 @@ export async function voidLedgerEntry(params: {
   ledgerId: string;
   reason: string;
   userId: string;
+  firmId: string;
 }) {
   return await prisma.$transaction(async (tx) => {
     const entry = await tx.financialLedger.findUnique({ where: { id: params.ledgerId } });
     if (!entry) throw new Error("Ledger entry not found");
+    if (entry.firmId !== params.firmId) throw new Error("Ledger entry not found");
     if (entry.isVoided) throw new Error("Ledger entry is already voided");
 
     await tx.financialLedger.update({
@@ -489,6 +513,7 @@ export async function voidLedgerEntry(params: {
     await tx.financialLedger.create({
       data: {
         branchId: entry.branchId,
+        firmId: entry.firmId,
         reference: revRef,
         description: `VOIDING: ${entry.description} (Reason: ${params.reason})`,
         accountCategory: "ADJUSTMENT",
@@ -572,9 +597,9 @@ export async function getCashAccountSummary(branchId: string) {
   };
 }
 
-export async function listBankAccounts(branchId?: string) {
+export async function listBankAccounts(firmId: string, branchId?: string) {
   const accounts = await prisma.bankAccount.findMany({
-    where: branchId ? { branchId } : {},
+    where: { firmId, ...(branchId ? { branchId } : {}) },
     orderBy: { createdAt: "asc" },
   });
 
@@ -595,6 +620,7 @@ export async function listBankAccounts(branchId?: string) {
 export async function saveBankAccount(params: {
   id?: string;
   branchId: string;
+  firmId: string;
   accountName: string;
   bankName: string;
   accountNumber: string;
@@ -605,6 +631,13 @@ export async function saveBankAccount(params: {
   const openingBal = round2(params.openingBalance ?? 0);
 
   if (params.id) {
+    const existing = await prisma.bankAccount.findUnique({
+      where: { id: params.id },
+      select: { firmId: true },
+    });
+    if (!existing || existing.firmId !== params.firmId) {
+      throw new Error("Bank account not found");
+    }
     return await prisma.bankAccount.update({
       where: { id: params.id },
       data: {
@@ -619,6 +652,7 @@ export async function saveBankAccount(params: {
   return await prisma.bankAccount.create({
     data: {
       branchId: params.branchId,
+      firmId: params.firmId,
       accountName: params.accountName,
       bankName: params.bankName,
       accountNumber: params.accountNumber,
@@ -659,6 +693,7 @@ export async function listReconciliations(branchId?: string) {
 
 export async function postReconciliation(params: {
   branchId: string;
+  firmId: string;
   type: ReconciliationType;
   bankAccountId?: string | null;
   expectedBalance: number;
@@ -669,6 +704,16 @@ export async function postReconciliation(params: {
   const difference = round2(params.actualBalance - params.expectedBalance);
 
   return await prisma.$transaction(async (tx) => {
+    if (params.bankAccountId) {
+      const bank = await tx.bankAccount.findUnique({
+        where: { id: params.bankAccountId },
+        select: { firmId: true },
+      });
+      if (!bank || bank.firmId !== params.firmId) {
+        throw new Error("Bank account not found");
+      }
+    }
+
     const rec = await tx.reconciliation.create({
       data: {
         branchId: params.branchId,
@@ -693,6 +738,7 @@ export async function postReconciliation(params: {
         await tx.cashTransaction.create({
           data: {
             branchId: params.branchId,
+            firmId: params.firmId,
             type: "ADJUSTMENT",
             amount: Math.abs(difference),
             balanceAfter: params.actualBalance,
@@ -717,13 +763,19 @@ export async function postReconciliation(params: {
 // PROFIT & LOSS REPORT
 // ----------------------------------------------------------------------------
 
-export async function getPnLReport(filters: { branchId?: string; from?: Date; to?: Date }) {
+export async function getPnLReport(filters: {
+  firmId: string;
+  branchId?: string;
+  from?: Date;
+  to?: Date;
+}) {
   const branchWhere = filters.branchId ? { branchId: filters.branchId } : {};
   const dateWhere = filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined;
 
   const [orders, expenses, purchases] = await Promise.all([
     prisma.order.aggregate({
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { notIn: ["CANCELLED", "REFUNDED"] },
         ...(dateWhere ? { placedAt: dateWhere } : {}),
@@ -733,6 +785,7 @@ export async function getPnLReport(filters: { branchId?: string; from?: Date; to
     prisma.expense.groupBy({
       by: ["category"],
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { in: ["APPROVED", "PAID"] },
         ...(dateWhere ? { expenseDate: dateWhere } : {}),
@@ -741,6 +794,7 @@ export async function getPnLReport(filters: { branchId?: string; from?: Date; to
     }),
     prisma.purchaseOrder.aggregate({
       where: {
+        firmId: filters.firmId,
         ...branchWhere,
         status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] },
         ...(dateWhere ? { orderDate: dateWhere } : {}),

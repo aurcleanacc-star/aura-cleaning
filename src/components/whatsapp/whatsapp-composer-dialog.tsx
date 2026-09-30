@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { interpolateWhatsAppTemplate } from "@/lib/whatsapp-templates";
+import { formatWhatsAppPhone, interpolateWhatsAppTemplate } from "@/lib/whatsapp-templates";
 import type { WhatsAppMessageType } from "@/generated/prisma/client";
 
 import { sendWhatsAppAction } from "@/app/(app)/settings/whatsapp/actions";
@@ -36,6 +36,7 @@ export interface WhatsAppComposerProps {
   initialType?: WhatsAppMessageType;
   documentName?: string;
   documentBase64?: string;
+  businessName: string;
 }
 
 const TYPE_OPTIONS: Array<{ value: WhatsAppMessageType; label: string; icon: string }> = [
@@ -64,6 +65,7 @@ export function WhatsAppComposerDialog({
   initialType = "INVOICE",
   documentName,
   documentBase64,
+  businessName,
 }: WhatsAppComposerProps) {
   const [messageType, setMessageType] = useState<WhatsAppMessageType>(initialType);
   const [customText, setCustomText] = useState("");
@@ -93,19 +95,23 @@ export function WhatsAppComposerDialog({
   const currentBody = getTemplateBody(messageType);
   const interpolated = interpolateWhatsAppTemplate(currentBody, {
     customerName,
-    orderId: orderNumber || orderId || "ORD-1024",
-    invoiceNumber: orderNumber ? `INV-${orderNumber.replace(/[^0-9]/g, "")}` : "INV-1024",
+    // No fabricated "ORD-1024"/"INV-1024" fallback: this dialog is also
+    // opened with no order context at all (e.g. the Customer profile's
+    // generic "Send WhatsApp" button), and a plausible-looking fake
+    // reference number in that preview could get sent to a real customer.
+    // Leaving these undefined lets interpolateWhatsAppTemplate's own
+    // obviously-a-placeholder "ORD-XXXX"/"INV-XXXX" fallback show instead.
+    orderId: orderNumber || orderId || undefined,
+    invoiceNumber: orderNumber ? `INV-${orderNumber.replace(/[^0-9]/g, "")}` : undefined,
     total: totalAmount,
     paid: paidAmount,
     balance: outstandingAmount,
     deliveryDate,
-    businessName: "AURCLEAN",
+    businessName,
     messageText: customText,
   });
 
-  const formattedPhoneDigits = phone.replace(/\D/g, "");
-  const cleanPhone = formattedPhoneDigits.length === 10 ? `91${formattedPhoneDigits}` : formattedPhoneDigits;
-  const directWaUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(interpolated)}`;
+  const directWaUrl = `https://wa.me/${formatWhatsAppPhone(phone)}?text=${encodeURIComponent(interpolated)}`;
 
   const handleSend = () => {
     startTransition(async () => {

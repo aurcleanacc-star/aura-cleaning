@@ -1,15 +1,49 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/money";
-import { formatDate } from "@/lib/dates";
 import { recordAudit } from "@/lib/audit";
+import { formatWhatsAppPhone, interpolateWhatsAppTemplate } from "@/lib/whatsapp-templates";
 import type { WhatsAppMessageStatus, WhatsAppMessageType } from "@/generated/prisma/client";
 
-// Server-only OpenWA environment configuration
+export { formatWhatsAppPhone, interpolateWhatsAppTemplate };
+
+// Server-only OpenWA environment configuration. No fallback secret: an
+// unconfigured OPENWA_API_KEY must fail closed (both for the outgoing
+// gateway calls below, which the real OpenWA server will then reject, and
+// for the inbound webhook in the route that imports this), never silently
+// authenticate with a guessable hardcoded string.
 const OPENWA_BASE_URL = (process.env.OPENWA_BASE_URL || process.env.OPENWA_API_URL || "http://localhost:8080").replace(/\/$/, "");
-const OPENWA_API_KEY = process.env.OPENWA_API_KEY || "aurclean_secret_key";
+export const OPENWA_API_KEY = process.env.OPENWA_API_KEY || "";
 const CONFIG_SESSION_ID = process.env.OPENWA_SESSION_ID || process.env.OPENWA_SESSION || null;
+
+/**
+ * Maps an OpenWA HTTP status code to a message staff can act on, so a 401
+ * (bad API key) doesn't read the same as a 429 (rate limited, try again) or
+ * a 500 (gateway's own fault). Falls back to whatever the gateway itself
+ * said, since that's more specific than a generic per-code message.
+ */
+function describeOpenWaError(status: number, gatewayMessage?: string | null): string {
+  switch (status) {
+    case 401:
+    case 403:
+      return "WhatsApp gateway authentication failed. Check the configured OpenWA API key.";
+    case 404:
+      return "WhatsApp session not found on the gateway. It may need to be reconnected.";
+    case 409:
+      return "WhatsApp session is not ready. Connect WhatsApp in Settings before sending.";
+    case 413:
+      return "Document is too large to send over WhatsApp.";
+    case 429:
+      return "WhatsApp gateway rate limit reached. Please try again shortly.";
+    case 500:
+      return "WhatsApp gateway encountered an internal error.";
+    case 503:
+    case 504:
+      return "WhatsApp gateway is unreachable. Confirm the OpenWA service is running.";
+    default:
+      return gatewayMessage || `WhatsApp gateway returned an unexpected error (HTTP ${status}).`;
+  }
+}
 
 export type OpenWaSessionStatus =
   | "initializing"
@@ -23,6 +57,7 @@ export type OpenWaSessionStatus =
   | "erp_unavailable";
 
 export interface SendWhatsAppParams {
+  firmId: string;
   phone: string;
   messageType: WhatsAppMessageType;
   messageText: string;
@@ -84,37 +119,13 @@ const DEFAULT_TEMPLATES: Record<WhatsAppMessageType, { name: string; body: strin
   },
   DELIVERY_CHALLAN: {
     name: "WhatsApp Delivery Challan",
-    body: "Hello {{customerName}},\n\nPlease find your AURCLEAN Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\nAURCLEAN\nThe Organic Laundry",
+    body: "Hello {{customerName}},\n\nPlease find your {{businessName}} Delivery Challan attached.\n\nChallan No: {{challanNumber}}\nOrder No: {{orderId}}\nDelivery Date: {{deliveryDate}}\n\nThank you,\n{{businessName}}",
   },
   CUSTOM: {
     name: "Custom Message",
     body: "Hi {{customerName}},\n\n{{messageText}}\n\nRegards,\n{{businessName}}",
   },
 };
-
-/** Formats local or international phone numbers */
-export function formatWhatsAppPhone(phone: string): string {
-  if (!phone) return "";
-  let digits = phone.replace(/\D/g, "");
-  if (!digits) return "";
-
-  // Strip leading 0 if 11 digits (e.g. 09876543210 -> 9876543210)
-  if (digits.length === 11 && digits.startsWith("0")) {
-    digits = digits.slice(1);
-  }
-
-  // Handle 10-digit Indian numbers -> add 91
-  if (digits.length === 10) {
-    return `91${digits}`;
-  }
-
-  // Handle 13-digit numbers starting with 910 (e.g. 9109876543210 -> 919876543210)
-  if (digits.length === 13 && digits.startsWith("910")) {
-    return `91${digits.slice(3)}`;
-  }
-
-  return digits;
-}
 
 /**
  * Executes a secure server-side HTTP fetch call to OpenWA API
@@ -208,7 +219,7 @@ async function resolveOpenWaSessionId(): Promise<{ sessionId: string | null; ope
 /**
  * Queries real-time session status directly from OpenWA and updates local DB cache
  */
-export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): Promise<WhatsAppStatusResponse> {
+export async function getWhatsAppStatus(firmId: string, options?: { forceRefresh?: boolean }): Promise<WhatsAppStatusResponse> {
   const now = new Date().toISOString();
 
   // Step 1: Verify ERP Database Connectivity
@@ -240,9 +251,10 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
   // Step 2: Resolve OpenWA session ID & test OpenWA reachability
   const discovery = await resolveOpenWaSessionId();
   if (!discovery.openWaOk) {
+    const fallbackSessionName = CONFIG_SESSION_ID || "aurclean_session";
     await prisma.whatsAppSession.upsert({
-      where: { sessionName: CONFIG_SESSION_ID || "aurclean_session" },
-      create: { sessionName: CONFIG_SESSION_ID || "aurclean_session", isConnected: false, apiStatus: "OPENWA_UNAVAILABLE" },
+      where: { firmId_sessionName: { firmId, sessionName: fallbackSessionName } },
+      create: { firmId, sessionName: fallbackSessionName, isConnected: false, apiStatus: "OPENWA_UNAVAILABLE" },
       update: { isConnected: false, apiStatus: "OPENWA_UNAVAILABLE", connectedNumber: null, qrCode: null },
     }).catch(() => null);
 
@@ -339,7 +351,13 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     }
   }
 
-  const connectedTokens = [
+  // Exact-match set, not substring matching: rawStatus.includes("connected")
+  // is true for "disconnected" (and .includes("active") is true for
+  // "inactive", .includes("ready") is true for "not_ready"), so a naive
+  // substring check misreports the gateway's own default disconnected state
+  // as connected. Normalize away separators and compare the WHOLE status
+  // string against known exact connected values instead.
+  const connectedStatuses = new Set([
     "ready",
     "connected",
     "paired",
@@ -347,18 +365,15 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
     "inchat",
     "islogged",
     "isloggedin",
+    "loggedin",
     "authenticated",
     "online",
-    "active",
-    "success",
     "open",
-    "login",
-    "logged_in",
-    "main",
-  ];
+  ]);
+  const normalizedStatus = rawStatus.replace(/[^a-z0-9]/g, "");
 
   const isActuallyConnected =
-    connectedTokens.some((token) => rawStatus.includes(token)) ||
+    connectedStatuses.has(normalizedStatus) ||
     responseData?.isLoggedIn === true ||
     responseData?.connected === true ||
     responseData?.authenticated === true ||
@@ -386,8 +401,9 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
 
   try {
     await prisma.whatsAppSession.upsert({
-      where: { sessionName: sessionId },
+      where: { firmId_sessionName: { firmId, sessionName: sessionId } },
       create: {
+        firmId,
         sessionName: sessionId,
         isConnected: isActuallyConnected,
         connectedNumber: isActuallyConnected ? rawPhone : null,
@@ -426,7 +442,7 @@ export async function getWhatsAppStatus(options?: { forceRefresh?: boolean }): P
 /**
  * Initiates a REAL session connection request to OpenWA API
  */
-export async function connectWhatsAppSession(): Promise<WhatsAppStatusResponse> {
+export async function connectWhatsAppSession(firmId: string): Promise<WhatsAppStatusResponse> {
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
@@ -434,7 +450,7 @@ export async function connectWhatsAppSession(): Promise<WhatsAppStatusResponse> 
   if (!health.ok) {
     const rootCheck = await fetchOpenWa("/", { timeoutMs: 3000 });
     if (!rootCheck.ok) {
-      return getWhatsAppStatus({ forceRefresh: true });
+      return getWhatsAppStatus(firmId, { forceRefresh: true });
     }
   }
 
@@ -455,26 +471,28 @@ export async function connectWhatsAppSession(): Promise<WhatsAppStatusResponse> 
     });
   }
 
-  return getWhatsAppStatus({ forceRefresh: true });
+  return getWhatsAppStatus(firmId, { forceRefresh: true });
 }
 
 /**
- * Force restarts session with OpenWA API
+ * Reconnects a session by logging it out then starting a fresh connection.
+ * The gateway (scripts/openwa-server.mjs) does not implement a /restart
+ * endpoint — only logout and start — so this composes those two real calls
+ * instead of hitting a route that would 404.
  */
-export async function reconnectWhatsAppSession(): Promise<WhatsAppStatusResponse> {
+export async function reconnectWhatsAppSession(firmId: string): Promise<WhatsAppStatusResponse> {
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
   await fetchOpenWa(`/api/sessions/${sessionId}/logout`, { method: "POST", timeoutMs: 5000 });
-  await fetchOpenWa(`/api/sessions/${sessionId}/restart`, { method: "POST", timeoutMs: 8000 });
 
-  return connectWhatsAppSession();
+  return connectWhatsAppSession(firmId);
 }
 
 /**
  * Disconnects / logs out active session from OpenWA API
  */
-export async function disconnectWhatsAppSession(): Promise<WhatsAppStatusResponse> {
+export async function disconnectWhatsAppSession(firmId: string): Promise<WhatsAppStatusResponse> {
   const discovery = await resolveOpenWaSessionId();
   const sessionId = discovery.sessionId || "aurclean_session";
 
@@ -483,15 +501,15 @@ export async function disconnectWhatsAppSession(): Promise<WhatsAppStatusRespons
 
   try {
     await prisma.whatsAppSession.upsert({
-      where: { sessionName: sessionId },
-      create: { sessionName: sessionId, isConnected: false, apiStatus: "DISCONNECTED", connectedNumber: null, qrCode: null },
+      where: { firmId_sessionName: { firmId, sessionName: sessionId } },
+      create: { firmId, sessionName: sessionId, isConnected: false, apiStatus: "DISCONNECTED", connectedNumber: null, qrCode: null },
       update: { isConnected: false, apiStatus: "DISCONNECTED", connectedNumber: null, qrCode: null },
     });
   } catch (err: any) {
     console.warn("DB logout update note:", err?.message);
   }
 
-  return getWhatsAppStatus({ forceRefresh: true });
+  return getWhatsAppStatus(firmId, { forceRefresh: true });
 }
 
 /**
@@ -509,12 +527,23 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     throw new Error("Invalid phone number provided for WhatsApp message delivery.");
   }
 
+  // Offered back on failure (and on success) so staff always have a manual
+  // path — opens WhatsApp Web/App with the same message pre-filled — without
+  // ever implying OpenWA itself sent anything it didn't.
   const whatsappWebUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(params.messageText)}`;
 
-  // Dynamic session resolution without blocking on heavy forceRefresh status checks
-  const sessionInfo = await resolveOpenWaSessionId();
-  const sessionId = sessionInfo.sessionId || CONFIG_SESSION_ID || "aurclean_session";
+  // Verify real session status before sending — a send attempt against a
+  // session that isn't "ready" is not a useful signal (the gateway rejects
+  // it too, but with a less specific error), and skipping this check is what
+  // let a session in "authenticating" silently fall through to "success".
+  const current = await getWhatsAppStatus(params.firmId, { forceRefresh: true });
+  if (!current.connected || current.status !== "ready") {
+    throw new Error(
+      `WhatsApp is not connected (Status: ${current.status}). Please connect WhatsApp in Settings. [FALLBACK_URL:${whatsappWebUrl}]`,
+    );
+  }
 
+  const sessionId = current.sessionId || CONFIG_SESSION_ID || "aurclean_session";
   const recipientJid = `${formattedPhone}@c.us`;
 
   let externalId: string | null = null;
@@ -530,7 +559,6 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
         caption: params.messageText,
         file: params.documentBase64,
         base64: params.documentBase64,
-        path: params.documentName || "document.pdf",
       }
     : {
         to: formattedPhone,
@@ -538,32 +566,15 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
         chatId: recipientJid,
         text: params.messageText,
         message: params.messageText,
-        body: params.messageText,
       };
 
-  const primaryEndpoints = params.documentBase64
-    ? [
-        `/api/sessions/${sessionId}/files`,
-        `/api/${sessionId}/send-file-base64`,
-        `/api/${sessionId}/send-file`,
-        `/api/sendFile`,
-        `/api/sendFileBase64`,
-        `/api/send-file`,
-        `/api/messages/send-file`,
-        `/message/sendMedia/${sessionId}`,
-        `/send-file`,
-        `/send`,
-      ]
-    : [
-        `/api/sessions/${sessionId}/messages`,
-        `/api/${sessionId}/send-message`,
-        `/api/sendText`,
-        `/api/send-message`,
-        `/api/send`,
-        `/message/sendText/${sessionId}`,
-        `/send-text`,
-        `/send`,
-      ];
+  // Only endpoints the gateway (scripts/openwa-server.mjs) actually
+  // implements: the session-scoped route first, its documented top-level
+  // alias as a fallback. Guessing at routes the gateway doesn't have just
+  // burns time on 404s before the real one is tried.
+  const endpoints = params.documentBase64
+    ? [`/api/sessions/${sessionId}/files`, `/api/sendFile`]
+    : [`/api/sessions/${sessionId}/messages`, `/api/sendText`];
 
   let sendRes: { ok: boolean; status: number; data: any; error?: string } = {
     ok: false,
@@ -572,37 +583,26 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
     error: "OpenWA Gateway endpoint not found",
   };
 
-  for (const endpoint of primaryEndpoints) {
-    const attempt = await fetchOpenWa(endpoint, {
+  for (const endpoint of endpoints) {
+    sendRes = await fetchOpenWa(endpoint, {
       method: "POST",
       body: payload,
       timeoutMs: 12000,
     });
-
-    if (attempt.ok || attempt.data?.success === true || attempt.data?.status === "success" || attempt.data?.id) {
-      sendRes = attempt;
-      break;
-    }
-
-    if (attempt.status !== 404) {
-      sendRes = attempt;
-    }
+    if (sendRes.ok) break;
   }
 
-  if (sendRes.ok || sendRes.data?.success === true || sendRes.data?.status === "success" || sendRes.data?.id) {
+  if (sendRes.ok) {
     const data = sendRes.data || {};
     externalId = data.id || data.messageId || data.msgId || null;
-    status = "DELIVERED";
-
-    // Auto-update session cache to CONNECTED since send succeeded
-    prisma.whatsAppSession.upsert({
-      where: { sessionName: sessionId },
-      create: { sessionName: sessionId, isConnected: true, apiStatus: "READY", lastConnectedAt: new Date() },
-      update: { isConnected: true, apiStatus: "READY", lastConnectedAt: new Date() },
-    }).catch(() => null);
+    // The gateway only confirms the message was handed to WhatsApp's servers
+    // (its own response says "SENT") — not that the recipient's device has
+    // received or read it. DELIVERED/READ are reserved for the webhook
+    // handler to set if a real delivery/read receipt ever arrives.
+    status = "SENT";
   } else {
     status = "FAILED";
-    errorMessage = sendRes.error || "OpenWA API returned message delivery failure";
+    errorMessage = describeOpenWaError(sendRes.status, sendRes.error);
   }
 
   // Record immutable database audit log
@@ -646,41 +646,10 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<{
   };
 }
 
-/** Interpolates variables into editable message templates */
-export function interpolateWhatsAppTemplate(
-  templateBody: string,
-  variables: {
-    customerName?: string;
-    orderId?: string;
-    invoiceNumber?: string;
-    challanNumber?: string;
-    total?: number;
-    paid?: number;
-    balance?: number;
-    deliveryDate?: string | Date;
-    businessName?: string;
-    messageText?: string;
-  },
-): string {
-  return templateBody
-    .replace(/\{\{customerName\}\}/g, variables.customerName || "Valued Customer")
-    .replace(/\{\{orderId\}\}/g, variables.orderId || "ORD-XXXX")
-    .replace(/\{\{invoiceNumber\}\}/g, variables.invoiceNumber || variables.orderId || "INV-XXXX")
-    .replace(/\{\{challanNumber\}\}/g, variables.challanNumber || "DC-XXXX")
-    .replace(/\{\{total\}\}/g, formatCurrency(variables.total ?? 0))
-    .replace(/\{\{paid\}\}/g, formatCurrency(variables.paid ?? 0))
-    .replace(/\{\{balance\}\}/g, formatCurrency(variables.balance ?? 0))
-    .replace(
-      /\{\{deliveryDate\}\}/g,
-      variables.deliveryDate ? formatDate(variables.deliveryDate) : "Scheduled Date",
-    )
-    .replace(/\{\{businessName\}\}/g, variables.businessName || "AURCLEAN")
-    .replace(/\{\{messageText\}\}/g, variables.messageText || "");
-}
-
 /** Retrieves or initializes templates in database */
-export async function getWhatsAppTemplates() {
+export async function getWhatsAppTemplates(firmId: string) {
   const existing = await prisma.whatsAppTemplate.findMany({
+    where: { firmId },
     orderBy: { code: "asc" },
   });
 
@@ -689,6 +658,7 @@ export async function getWhatsAppTemplates() {
       Object.entries(DEFAULT_TEMPLATES).map(([code, tpl]) =>
         prisma.whatsAppTemplate.create({
           data: {
+            firmId,
             code: code as WhatsAppMessageType,
             name: tpl.name,
             body: tpl.body,
@@ -704,10 +674,11 @@ export async function getWhatsAppTemplates() {
 }
 
 /** Saves/updates a message template */
-export async function saveWhatsAppTemplate(code: WhatsAppMessageType, name: string, body: string) {
+export async function saveWhatsAppTemplate(firmId: string, code: WhatsAppMessageType, name: string, body: string) {
   return prisma.whatsAppTemplate.upsert({
-    where: { code },
+    where: { firmId_code: { firmId, code } },
     create: {
+      firmId,
       code,
       name,
       body,
@@ -727,6 +698,14 @@ export async function getWhatsAppHistory(params: {
   orderId?: string;
   take?: number;
 }) {
+  // WhatsAppLog has no firmId column of its own, so it can only be scoped
+  // through a customer or order the caller has already verified belongs to
+  // its own firm — never called with neither, which would return every
+  // firm's message history unfiltered.
+  if (!params.customerId && !params.orderId) {
+    throw new Error("getWhatsAppHistory requires a customerId or orderId to scope by");
+  }
+
   return prisma.whatsAppLog.findMany({
     where: {
       ...(params.customerId ? { customerId: params.customerId } : {}),

@@ -10,7 +10,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -61,9 +63,17 @@ export async function saveBranchAction(
       isActive: input.isActive,
     };
 
+    if (input.id) {
+      const existing = await prisma.branch.findUnique({ where: { id: input.id }, select: { firmId: true } });
+      if (!existing) throw new BusinessRuleError("Branch not found");
+      if (existing.firmId !== requireFirmId(user)) {
+        throw new BusinessRuleError("This branch belongs to a different organization");
+      }
+    }
+
     const branch = input.id
       ? await prisma.branch.update({ where: { id: input.id }, data })
-      : await prisma.branch.create({ data });
+      : await prisma.branch.create({ data: { ...data, firmId: requireFirmId(user) } });
 
     await recordAudit({
       userId: user.id,
@@ -97,9 +107,17 @@ export async function saveServiceAction(
       isActive: input.isActive,
     };
 
+    if (input.id) {
+      const existing = await prisma.service.findUnique({ where: { id: input.id }, select: { firmId: true } });
+      if (!existing) throw new BusinessRuleError("Service not found");
+      if (existing.firmId !== requireFirmId(user)) {
+        throw new BusinessRuleError("This service belongs to a different organization");
+      }
+    }
+
     const service = input.id
       ? await prisma.service.update({ where: { id: input.id }, data })
-      : await prisma.service.create({ data });
+      : await prisma.service.create({ data: { ...data, firmId: requireFirmId(user) } });
 
     await recordAudit({
       userId: user.id,
@@ -129,9 +147,17 @@ export async function saveGarmentTypeAction(
       isActive: input.isActive,
     };
 
+    if (input.id) {
+      const existing = await prisma.garmentType.findUnique({ where: { id: input.id }, select: { firmId: true } });
+      if (!existing) throw new BusinessRuleError("Garment type not found");
+      if (existing.firmId !== requireFirmId(user)) {
+        throw new BusinessRuleError("This garment type belongs to a different organization");
+      }
+    }
+
     const garmentType = input.id
       ? await prisma.garmentType.update({ where: { id: input.id }, data })
-      : await prisma.garmentType.create({ data });
+      : await prisma.garmentType.create({ data: { ...data, firmId: requireFirmId(user) } });
 
     await recordAudit({
       userId: user.id,
@@ -151,6 +177,15 @@ export async function saveServiceRateAction(payload: unknown): Promise<ActionRes
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.CATALOGUE_MANAGE);
     const input = serviceRateSchema.parse(payload);
+    const firmId = requireFirmId(user);
+
+    const [service, garmentType] = await Promise.all([
+      prisma.service.findUnique({ where: { id: input.serviceId }, select: { firmId: true } }),
+      prisma.garmentType.findUnique({ where: { id: input.garmentTypeId }, select: { firmId: true } }),
+    ]);
+    if (!service || service.firmId !== firmId || !garmentType || garmentType.firmId !== firmId) {
+      throw new BusinessRuleError("That service or garment type does not belong to your organization");
+    }
 
     await prisma.serviceRate.upsert({
       where: {
@@ -236,6 +271,7 @@ export async function resendNotificationAction(
 export async function saveSettingsAction(payload: unknown): Promise<ActionResult<null>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.SETTINGS_MANAGE);
+    const firmId = requireFirmId(user);
     const input = settingSchema.parse(payload);
 
     const entries: { key: string; value: string; category: string }[] = [
@@ -261,8 +297,8 @@ export async function saveSettingsAction(payload: unknown): Promise<ActionResult
     await prisma.$transaction(
       entries.map((entry) =>
         prisma.setting.upsert({
-          where: { key: entry.key },
-          create: entry,
+          where: { firmId_key: { firmId, key: entry.key } },
+          create: { ...entry, firmId },
           update: { value: entry.value },
         }),
       ),
@@ -288,12 +324,13 @@ export async function createExpenseAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
     const input = expenseSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const expense = await prisma.expense.create({
       data: {
         expenseNumber: await nextExpenseNumber(),
         branchId,
+        firmId: requireFirmId(user),
         category: input.category,
         amount: input.amount,
         description: input.description,
@@ -375,11 +412,13 @@ export async function archiveServiceAction(
       select: {
         id: true,
         name: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orderItems: true, garments: true, rates: true } },
       },
     });
     if (!service) throw new NotFoundError("Service not found");
+    assertFirmAccess(user, service.firmId);
 
     const inUse = service._count.orderItems + service._count.garments > 0;
 
@@ -426,11 +465,13 @@ export async function archiveGarmentTypeAction(
       select: {
         id: true,
         name: true,
+        firmId: true,
         isActive: true,
         _count: { select: { orderItems: true, garments: true } },
       },
     });
     if (!type) throw new NotFoundError("Garment type not found");
+    assertFirmAccess(user, type.firmId);
 
     if (type._count.orderItems + type._count.garments > 0) {
       if (!type.isActive) throw new BusinessRuleError(`${type.name} is already retired`);

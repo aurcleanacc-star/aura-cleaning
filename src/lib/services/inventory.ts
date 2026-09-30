@@ -26,6 +26,7 @@ export async function applyStockMovement(
   params: {
     itemId: string;
     branchId: string;
+    firmId: string;
     type: InventoryTxnType;
     quantity: number;
     unitCost?: number | null;
@@ -37,9 +38,10 @@ export async function applyStockMovement(
 ): Promise<number> {
   const item = await tx.inventoryItem.findUnique({
     where: { id: params.itemId },
-    select: { id: true, name: true, unit: true },
+    select: { id: true, name: true, unit: true, firmId: true },
   });
   if (!item) throw new NotFoundError("Inventory item not found");
+  if (item.firmId !== params.firmId) throw new NotFoundError("Inventory item not found");
 
   const stock = await tx.inventoryStock.upsert({
     where: { itemId_branchId: { itemId: params.itemId, branchId: params.branchId } },
@@ -83,9 +85,9 @@ export async function applyStockMovement(
 }
 
 /** Items at or below their minimum level, for the dashboard and alerts. */
-export async function lowStockItems(branchId?: string) {
+export async function lowStockItems(firmId: string, branchId?: string) {
   const stocks = await prisma.inventoryStock.findMany({
-    where: { ...(branchId ? { branchId } : {}), item: { isActive: true } },
+    where: { ...(branchId ? { branchId } : {}), item: { firmId, isActive: true } },
     include: {
       item: { select: { id: true, sku: true, name: true, unit: true, minStockLevel: true, category: true } },
       branch: { select: { id: true, name: true } },

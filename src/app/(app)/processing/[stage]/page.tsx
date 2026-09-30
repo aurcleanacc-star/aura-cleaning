@@ -10,7 +10,7 @@ import { Workstation, type QueueItem } from "@/app/(app)/processing/[stage]/work
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS, STAGE_PERMISSION, type PermissionCode } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import {
   STAGE_LABELS,
   STAGE_OUTCOMES,
@@ -77,6 +77,7 @@ export default async function WorkstationPage({
 
   const user = await requirePermission(PERMISSIONS.PROCESSING_VIEW);
   const branchId = scopedBranchId(user, query);
+  const firmId = requireFirmId(user);
   const canOperate = hasPermission(user, STAGE_PERMISSION[stage] as PermissionCode);
 
   const requestedStatus = (param(query, "queue") ?? "PENDING").toUpperCase() as TaskStatus;
@@ -87,6 +88,7 @@ export default async function WorkstationPage({
       where: {
         stage,
         status,
+        branch: { firmId },
         ...(branchId ? { branchId } : {}),
         garment: { status: { notIn: ["LOST", "DELIVERED"] } },
       },
@@ -114,7 +116,7 @@ export default async function WorkstationPage({
     }),
     prisma.processingTask.groupBy({
       by: ["status"],
-      where: { stage, ...(branchId ? { branchId } : {}) },
+      where: { stage, branch: { firmId }, ...(branchId ? { branchId } : {}) },
       _count: { _all: true },
     }),
   ]);

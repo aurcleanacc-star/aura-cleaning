@@ -35,11 +35,11 @@ export async function createOrder(
 ): Promise<CreatedOrder> {
   const [services, garmentTypes] = await Promise.all([
     prisma.service.findMany({
-      where: { id: { in: [...new Set(input.items.map((i) => i.serviceId))] } },
+      where: { firmId: actor.firmId, id: { in: [...new Set(input.items.map((i) => i.serviceId))] } },
       select: { id: true, name: true, stages: true, isActive: true, turnaroundHours: true },
     }),
     prisma.garmentType.findMany({
-      where: { id: { in: [...new Set(input.items.map((i) => i.garmentTypeId))] } },
+      where: { firmId: actor.firmId, id: { in: [...new Set(input.items.map((i) => i.garmentTypeId))] } },
       select: { id: true, name: true, isActive: true, trackingCategory: true },
     }),
   ]);
@@ -122,6 +122,7 @@ export async function createOrder(
       // spot so the counter can find them again by phone next time.
       const customer = await upsertCustomer(tx, {
         branchId: input.branchId,
+        firmId: actor.firmId,
         createdById: actor.userId,
         details: {
           name: input.customerName,
@@ -138,6 +139,7 @@ export async function createOrder(
         data: {
           orderNumber,
           branchId: input.branchId,
+          firmId: actor.firmId,
           type: input.type,
           priority: input.priority,
           status: "RECEIVED",
@@ -231,6 +233,7 @@ export async function createOrder(
           type: "ORDER",
           status: input.advanceAmount >= totals.totalAmount ? "PAID" : "ISSUED",
           branchId: input.branchId,
+          firmId: actor.firmId,
           orderId: order.id,
           b2bAccountId: input.b2bAccountId ?? null,
           billToName: input.customerName,
@@ -275,6 +278,7 @@ export async function createOrder(
           data: {
             paymentNumber: await nextPaymentNumber(tx),
             branchId: input.branchId,
+            firmId: actor.firmId,
             orderId: order.id,
             amount: input.advanceAmount,
             method: input.advanceMethod,

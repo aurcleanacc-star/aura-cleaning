@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 export const metadata = { title: "Supplier" };
@@ -38,7 +38,7 @@ export default async function SupplierDetailPage({
 
   // `city` and `pincode` are not on Supplier; the address line carries them.
   const supplier = await prisma.supplier.findFirst({
-    where: { OR: [{ id }, { code: id }] },
+    where: { firmId: requireFirmId(user), OR: [{ id }, { code: id }] },
     include: {
       purchaseOrders: {
         orderBy: { orderDate: "desc" },

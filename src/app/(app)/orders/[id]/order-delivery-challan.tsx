@@ -13,14 +13,15 @@ import { CHALLAN_STATUS_LABELS } from "@/lib/workflow";
 import { toast } from "sonner";
 import { createDeliveryChallanAction, updateChallanStatusAction } from "@/app/(app)/delivery-challans/actions";
 import { sendDocumentWhatsAppAction } from "@/app/api/documents/actions";
+import { formatWhatsAppPhone } from "@/lib/whatsapp-templates";
 import type { ChallanStatus } from "@/generated/prisma/client";
 
 interface ChallanSummary {
   id: string;
   challanNumber: string;
   status: ChallanStatus;
-  grandTotal: unknown;
-  balanceAmount: unknown;
+  grandTotal: number;
+  balanceAmount: number;
 }
 
 interface Props {
@@ -78,9 +79,7 @@ export function OrderDeliveryChallanSection({
       if (res.success) {
         toast.success(`Delivery Challan sent to ${customerPhone} via WhatsApp!`);
       } else {
-        const formattedPhoneDigits = (customerPhone || "").replace(/\D/g, "");
-        const cleanPhone = formattedPhoneDigits.length === 10 ? `91${formattedPhoneDigits}` : formattedPhoneDigits;
-        const fallbackUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your AURCLEAN Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you,\nAURCLEAN`)}`;
+        const fallbackUrl = `https://wa.me/${formatWhatsAppPhone(customerPhone)}?text=${encodeURIComponent(`Hello ${customerName},\n\nPlease find your Delivery Challan attached.\nOrder #${_orderNumber}\n\nThank you.`)}`;
 
         toast.error("OpenWA Gateway Endpoint Unavailable", {
           description: "Click below to send via WhatsApp Web / App directly",
@@ -144,10 +143,10 @@ export function OrderDeliveryChallanSection({
               <div>
                 <p className="font-mono text-sm font-semibold">{activeChallan.challanNumber}</p>
                 <p className="mt-0.5 text-muted-foreground">
-                  Total: <span className="font-semibold text-foreground">{formatCurrency(activeChallan.grandTotal as never)}</span>{" "}
+                  Total: <span className="font-semibold text-foreground">{formatCurrency(activeChallan.grandTotal)}</span>{" "}
                   · Balance:{" "}
                   <span className="font-semibold text-warning-foreground">
-                    {formatCurrency(activeChallan.balanceAmount as never)}
+                    {formatCurrency(activeChallan.balanceAmount)}
                   </span>
                 </p>
               </div>

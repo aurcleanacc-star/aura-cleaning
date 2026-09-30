@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
-import { authorize, requireWriteBranch } from "@/lib/session";
+import { assertFirmAccess, authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
 import { runAction, type ActionResult, BusinessRuleError, NotFoundError } from "@/lib/action-result";
 import { nextExpenseNumber } from "@/lib/sequence";
 
@@ -35,11 +35,12 @@ export async function saveExpenseAction(payload: unknown): Promise<ActionResult<
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
     const input = expenseSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.id) {
       const existing = await prisma.expense.findUnique({ where: { id: input.id } });
       if (!existing) throw new NotFoundError("Expense record not found");
+      assertFirmAccess(user, existing.firmId);
 
       const updated = await prisma.expense.update({
         where: { id: input.id },
@@ -73,6 +74,7 @@ export async function saveExpenseAction(payload: unknown): Promise<ActionResult<
       data: {
         expenseNumber,
         branchId,
+        firmId: requireFirmId(user),
         category: input.category,
         amount: input.amount,
         description: input.description,
@@ -105,6 +107,7 @@ export async function deleteExpenseAction(id: string): Promise<ActionResult<{ su
 
     const expense = await prisma.expense.findUnique({ where: { id } });
     if (!expense) throw new NotFoundError("Expense record not found");
+    assertFirmAccess(user, expense.firmId);
 
     await prisma.expense.delete({ where: { id } });
 

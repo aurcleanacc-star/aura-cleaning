@@ -7,7 +7,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -37,14 +39,15 @@ export async function createComplaintAction(
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.COMPLAINT_CREATE);
     const input = createComplaintSchema.parse(payload);
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     if (input.orderId) {
       const order = await prisma.order.findUnique({
         where: { id: input.orderId },
-        select: { branchId: true },
+        select: { branchId: true, firmId: true },
       });
       if (!order) throw new NotFoundError("Order not found");
+      assertFirmAccess(user, order.firmId);
       assertBranchAccess(user, order.branchId);
     }
 
@@ -52,6 +55,7 @@ export async function createComplaintAction(
       data: {
         complaintNumber: await nextComplaintNumber(),
         branchId,
+        firmId: requireFirmId(user),
         type: input.type,
         priority: input.priority,
         status: "OPEN",
@@ -113,10 +117,11 @@ export async function updateComplaintAction(payload: unknown): Promise<ActionRes
 
     const complaint = await prisma.complaint.findUnique({
       where: { id: input.complaintId },
-      select: { id: true, branchId: true, complaintNumber: true, status: true },
+      select: { id: true, branchId: true, firmId: true, complaintNumber: true, status: true },
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
 
     if (["RESOLVED", "CLOSED"].includes(complaint.status) && input.status) {
       throw new BusinessRuleError("This complaint is already closed");
@@ -175,6 +180,7 @@ export async function resolveComplaintAction(payload: unknown): Promise<ActionRe
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
     if (["RESOLVED", "CLOSED"].includes(complaint.status)) {
       throw new BusinessRuleError("This complaint is already resolved");
     }
@@ -326,10 +332,11 @@ export async function uploadComplaintAttachmentAction(
 
     const complaint = await prisma.complaint.findUnique({
       where: { id: complaintId },
-      select: { id: true, branchId: true, complaintNumber: true },
+      select: { id: true, branchId: true, firmId: true, complaintNumber: true },
     });
     if (!complaint) throw new NotFoundError("Complaint not found");
     assertBranchAccess(user, complaint.branchId);
+    assertFirmAccess(user, complaint.firmId);
 
     const stored = await getStorageProvider().upload({
       body: Buffer.from(await file.arrayBuffer()),

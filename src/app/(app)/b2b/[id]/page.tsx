@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { assertFirmAccess, hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 
 export const metadata = { title: "Corporate account" };
@@ -72,15 +72,17 @@ export default async function B2BAccountPage({
   });
 
   if (!account) notFound();
+  assertFirmAccess(user, account.firmId);
+  const firmId = requireFirmId(user);
 
   const [services, garmentTypes, lifetime] = await Promise.all([
     prisma.service.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.garmentType.findMany({
-      where: { isActive: true },
+      where: { firmId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

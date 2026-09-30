@@ -59,6 +59,22 @@ export async function loginAction(
     }
   }
 
+  // Checked ahead of signIn so a deactivated firm gets its own explicit
+  // message rather than the generic "not recognised" — NextAuth's
+  // CredentialsSignin error from a null authorize() result doesn't carry a
+  // reason through cleanly, so the same check that lives in auth.ts's
+  // authorize() is repeated here purely to surface the right copy.
+  const candidate = await prisma.user.findUnique({
+    where: { accessCode },
+    select: { firm: { select: { status: true } } },
+  });
+  if (candidate?.firm && candidate.firm.status !== "ACTIVE") {
+    return {
+      ok: false,
+      error: "This firm is currently inactive. Please contact the system administrator.",
+    };
+  }
+
   try {
     await signIn("credentials", { accessCode, redirect: false });
   } catch (error) {
@@ -75,13 +91,14 @@ export async function loginAction(
 
   const user = await prisma.user.findUnique({
     where: { accessCode },
-    select: { id: true, branchId: true, role: true },
+    select: { id: true, branchId: true, firmId: true, role: true },
   });
 
   if (user) {
     await recordAudit({
       userId: user.id,
       branchId: user.branchId,
+      firmId: user.firmId,
       action: "LOGIN",
       entity: "User",
       entityId: user.id,

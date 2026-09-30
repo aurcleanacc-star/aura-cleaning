@@ -5,6 +5,7 @@ import { ROLE_LABELS } from "@/lib/rbac";
 import type { UserRole } from "@/generated/prisma/enums";
 
 export interface AuditLogFilters {
+  firmId: string;
   branchId?: string;
   search?: string;
   action?: string;
@@ -29,6 +30,7 @@ export interface AuditLogRow {
 export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogRow[]> {
   const rows = await prisma.auditLog.findMany({
     where: {
+      firmId: filters.firmId,
       ...(filters.branchId ? { branchId: filters.branchId } : {}),
       ...(filters.action ? { action: filters.action } : {}),
       ...(filters.userId ? { userId: filters.userId } : {}),

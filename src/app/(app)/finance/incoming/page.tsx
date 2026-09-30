@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listLedgerEntries, listBankAccounts } from "@/lib/services/accounting";
 import { IncomingView } from "./incoming-view";
 
@@ -12,10 +12,11 @@ export default async function IncomingPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
   const [ledger, bankAccounts] = await Promise.all([
-    listLedgerEntries({ branchId, limit: 300 }),
-    listBankAccounts(branchId),
+    listLedgerEntries({ firmId, branchId, limit: 300 }),
+    listBankAccounts(firmId, branchId),
   ]);
 
   const canManage = hasPermission(user, PERMISSIONS.BILLING_RECORD_PAYMENT);

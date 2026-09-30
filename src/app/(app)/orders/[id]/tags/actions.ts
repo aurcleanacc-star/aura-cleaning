@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, authorize } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, authorize } from "@/lib/session";
 import { NotFoundError, runAction, type ActionResult } from "@/lib/action-result";
 import { cuidSchema } from "@/lib/validations/common";
 import { z } from "zod";
@@ -37,10 +37,11 @@ export async function recordTagPrintAction(
 
     const order = await prisma.order.findUnique({
       where: { id: input.orderId },
-      select: { id: true, orderNumber: true, branchId: true, tagPrintCount: true },
+      select: { id: true, orderNumber: true, branchId: true, firmId: true, tagPrintCount: true },
     });
     if (!order) throw new NotFoundError("Order not found");
     assertBranchAccess(user, order.branchId);
+    assertFirmAccess(user, order.firmId);
 
     const isReprint = order.tagPrintCount > 0;
     const printedAt = new Date();

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { hasPermission, requireFirmId, requirePermission } from "@/lib/session";
 import { listLedgerEntries } from "@/lib/services/accounting";
 import { LedgerView } from "./ledger-view";
 
@@ -12,8 +12,9 @@ export default async function LedgerPage() {
   const branchId = hasPermission(user, PERMISSIONS.DASHBOARD_VIEW_ALL_BRANCHES)
     ? undefined
     : user.branchId ?? undefined;
+  const firmId = requireFirmId(user);
 
-  const data = await listLedgerEntries({ branchId, limit: 300 });
+  const data = await listLedgerEntries({ firmId, branchId, limit: 300 });
 
   const canManage = hasPermission(user, PERMISSIONS.FINANCE_MANAGE);
 

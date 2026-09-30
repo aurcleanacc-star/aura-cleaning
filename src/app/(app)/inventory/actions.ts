@@ -7,7 +7,9 @@ import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   assertBranchAccess,
+  assertFirmAccess,
   authorize,
+  requireFirmId,
   requireWriteBranch,
 } from "@/lib/session";
 import {
@@ -30,6 +32,12 @@ export async function saveInventoryItemAction(
     const user = await authorize(PERMISSIONS.INVENTORY_MANAGE);
     const input = inventoryItemSchema.parse(payload);
 
+    if (input.id) {
+      const existing = await prisma.inventoryItem.findUnique({ where: { id: input.id }, select: { firmId: true } });
+      if (!existing) throw new NotFoundError("Inventory item not found");
+      assertFirmAccess(user, existing.firmId);
+    }
+
     const item = input.id
       ? await prisma.inventoryItem.update({
           where: { id: input.id },
@@ -48,6 +56,7 @@ export async function saveInventoryItemAction(
           data: {
             sku: input.sku,
             name: input.name,
+            firmId: requireFirmId(user),
             category: input.category,
             unit: input.unit,
             description: input.description ?? null,
@@ -81,12 +90,13 @@ export async function recordStockMovementAction(
         ? PERMISSIONS.INVENTORY_ADJUST
         : PERMISSIONS.INVENTORY_MANAGE,
     );
-    const branchId = requireWriteBranch(user, input.branchId);
+    const branchId = await requireWriteBranch(user, input.branchId);
 
     const balance = await prisma.$transaction((tx) =>
       applyStockMovement(tx, {
         itemId: input.itemId,
         branchId,
+        firmId: requireFirmId(user),
         type: input.type,
         quantity: input.quantity,
         unitCost: input.unitCost ?? null,
@@ -120,23 +130,27 @@ export async function transferStockAction(
     const input = stockTransferSchema.parse(payload);
 
     assertBranchAccess(user, input.fromBranchId);
+    const firmId = requireFirmId(user);
 
     const [fromBranch, toBranch] = await Promise.all([
       prisma.branch.findUnique({
         where: { id: input.fromBranchId },
-        select: { name: true },
+        select: { name: true, firmId: true },
       }),
       prisma.branch.findUnique({
         where: { id: input.toBranchId },
-        select: { name: true },
+        select: { name: true, firmId: true },
       }),
     ]);
     if (!fromBranch || !toBranch) throw new NotFoundError("Branch not found");
+    assertFirmAccess(user, fromBranch.firmId);
+    assertFirmAccess(user, toBranch.firmId);
 
     const result = await prisma.$transaction(async (tx) => {
       const fromBalance = await applyStockMovement(tx, {
         itemId: input.itemId,
         branchId: input.fromBranchId,
+        firmId,
         type: "TRANSFER_OUT",
         quantity: input.quantity,
         reference: `To ${toBranch.name}`,
@@ -148,6 +162,7 @@ export async function transferStockAction(
       const toBalance = await applyStockMovement(tx, {
         itemId: input.itemId,
         branchId: input.toBranchId,
+        firmId,
         type: "TRANSFER_IN",
         quantity: input.quantity,
         reference: `From ${fromBranch.name}`,
@@ -182,9 +197,10 @@ export async function toggleInventoryItemAction(
 
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId },
-      select: { id: true, sku: true, name: true },
+      select: { id: true, sku: true, name: true, firmId: true },
     });
     if (!item) throw new NotFoundError("Inventory item not found");
+    assertFirmAccess(user, item.firmId);
 
     if (!isActive) {
       const remaining = await prisma.inventoryStock.aggregate({

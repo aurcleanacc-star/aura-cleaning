@@ -14,10 +14,24 @@ datasource db {
 // ENUMS
 // ============================================================================
 
+// PLATFORM_ADMIN is the cross-firm system operator (spec: "Super Admin") —
+// belongs to no single firm (User.firmId is null) and manages the Firms
+// module itself, optionally "entering" a firm to operate inside it.
+// SUPER_ADMIN is the existing per-firm admin role (spec: "Firm Admin") —
+// unchanged in behavior, now naturally bounded to the one firm its
+// branches belong to. Kept the same enum value to avoid rewriting every
+// existing seeded access code and role check; see ROLE_LABELS for the
+// display-name mapping.
 enum UserRole {
+  PLATFORM_ADMIN
   SUPER_ADMIN
   MANAGER
   SCANNER
+}
+
+enum FirmStatus {
+  ACTIVE
+  INACTIVE
 }
 
 enum UserStatus {
@@ -383,9 +397,65 @@ enum ExpenseStatus {
 // ORGANISATION, IDENTITY & ACCESS CONTROL
 // ============================================================================
 
+/// A tenant. Every business-data row in the system belongs to exactly one
+/// Firm (directly, or transitively through a Branch that does) — this is
+/// the hard boundary a PLATFORM_ADMIN operates above and every other role
+/// operates strictly inside.
+model Firm {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  legalName   String?
+  addressLine String?
+  city        String?
+  state       String?
+  pincode     String?
+  phone       String?
+  email       String?
+  gstin       String?
+  pan         String?
+  website     String?
+  logoUrl     String?
+  status      FirmStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches          Branch[]
+  users             User[]
+  auditLogs         AuditLog[]
+  settings          Setting[]
+  services          Service[]
+  garmentTypes      GarmentType[]
+  orders            Order[]
+  garments          Garment[]
+  invoices          Invoice[]
+  payments          Payment[]
+  deliveries        Delivery[]
+  deliveryChallans  DeliveryChallan[]
+  inventoryItems    InventoryItem[]
+  suppliers         Supplier[]
+  purchaseOrders    PurchaseOrder[]
+  b2bAccounts       B2BAccount[]
+  complaints        Complaint[]
+  expenses          Expense[]
+  customers         Customer[]
+  scanEvents        ScanEvent[]
+  bankAccounts      BankAccount[]
+  financialLedgers  FinancialLedger[]
+  cashTransactions  CashTransaction[]
+  whatsAppTemplates WhatsAppTemplate[]
+  whatsAppSessions  WhatsAppSession[]
+
+  @@index([status])
+  @@map("firms")
+}
+
 model Branch {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id       String     @id @default(cuid())
-  code     String     @unique
+  code     String
   name     String
   type     BranchType @default(BRANCH)
   parentId String?
@@ -443,10 +513,14 @@ model Branch {
 
   @@index([parentId])
   @@index([isActive])
+  @@unique([firmId, code])
+  @@index([firmId])
   @@map("branches")
 }
 
 model User {
+  firmId String?
+  firm   Firm?  @relation(fields: [firmId], references: [id], onDelete: SetNull)
   id           String     @id @default(cuid())
   employeeCode String?    @unique
   name         String
@@ -512,6 +586,7 @@ model User {
   @@index([branchId])
   @@index([role])
   @@index([status])
+  @@index([firmId])
   @@map("users")
 }
 
@@ -596,6 +671,8 @@ model VerificationToken {
 }
 
 model AuditLog {
+  firmId String?
+  firm   Firm?  @relation(fields: [firmId], references: [id], onDelete: SetNull)
   id        String   @id @default(cuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -614,6 +691,7 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
+  @@index([firmId])
   @@map("audit_logs")
 }
 
@@ -626,11 +704,15 @@ model Sequence {
 }
 
 model Setting {
-  key       String   @id
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  key       String
   value     String
   category  String   @default("general")
   updatedAt DateTime @updatedAt
 
+  @@id([firmId, key])
+  @@index([firmId])
   @@map("settings")
 }
 
@@ -745,8 +827,10 @@ model Driver {
 // ============================================================================
 
 model Service {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id              String            @id @default(cuid())
-  code            String            @unique
+  code            String
   name            String
   description     String?
   pricingMode     PricingMode       @default(PER_PIECE)
@@ -764,12 +848,16 @@ model Service {
   rateCards  B2BRateCard[]
 
   @@index([isActive])
+  @@unique([firmId, code])
+  @@index([firmId])
   @@map("services")
 }
 
 model GarmentType {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id               String           @id @default(cuid())
-  code             String           @unique
+  code             String
   name             String
   /// Loose merchandising grouping, kept for the catalogue screens.
   category         String           @default("GENERAL")
@@ -790,6 +878,8 @@ model GarmentType {
 
   @@index([isActive])
   @@index([trackingCategory])
+  @@unique([firmId, code])
+  @@index([firmId])
   @@map("garment_types")
 }
 
@@ -814,6 +904,8 @@ model ServiceRate {
 // ============================================================================
 
 model Order {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String        @id @default(cuid())
   orderNumber   String        @unique
   branchId      String
@@ -898,6 +990,7 @@ model Order {
   @@index([expectedDeliveryAt])
   @@index([paymentStatus])
   @@index([b2bAccountId])
+  @@index([firmId])
   @@map("orders")
 }
 
@@ -947,6 +1040,8 @@ model OrderStatusHistory {
 // ============================================================================
 
 model Garment {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id           String @id @default(cuid())
   garmentCode  String @unique
   qrPayload    String @unique
@@ -1001,6 +1096,7 @@ model Garment {
   @@index([currentStage])
   @@index([garmentTypeId])
   @@index([branchId, trackingCategory, status])
+  @@index([firmId])
   @@map("garments")
 }
 
@@ -1125,6 +1221,8 @@ model ProcessingHistory {
 // ============================================================================
 
 model Invoice {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String        @id @default(cuid())
   invoiceNumber String        @unique
   type          InvoiceType   @default(ORDER)
@@ -1180,6 +1278,7 @@ model Invoice {
   @@index([orderId])
   @@index([b2bAccountId])
   @@index([status])
+  @@index([firmId])
   @@map("invoices")
 }
 
@@ -1201,6 +1300,8 @@ model InvoiceLine {
 }
 
 model Payment {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String   @id @default(cuid())
   paymentNumber String   @unique
   branchId      String
@@ -1238,6 +1339,7 @@ model Payment {
   @@index([orderId])
   @@index([invoiceId])
   @@index([providerPaymentId])
+  @@index([firmId])
   @@map("payments")
 }
 
@@ -1307,6 +1409,8 @@ model Pickup {
 }
 
 model Delivery {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id             String         @id @default(cuid())
   deliveryNumber String         @unique
   orderId        String
@@ -1348,6 +1452,7 @@ model Delivery {
   @@index([branchId, status])
   @@index([driverId, scheduledAt])
   @@index([orderId])
+  @@index([firmId])
   @@map("deliveries")
 }
 
@@ -1356,6 +1461,8 @@ model Delivery {
 // ============================================================================
 
 model DeliveryChallan {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id                   String        @id @default(cuid())
   challanNumber        String        @unique
   orderId              String
@@ -1404,6 +1511,7 @@ model DeliveryChallan {
   @@index([customerId])
   @@index([challanNumber])
   @@index([challanDate])
+  @@index([firmId])
   @@map("delivery_challans")
 }
 
@@ -1450,8 +1558,10 @@ model DeliveryChallanHistory {
 // ============================================================================
 
 model InventoryItem {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String            @id @default(cuid())
-  sku           String            @unique
+  sku           String
   name          String
   category      InventoryCategory @default(OTHER)
   unit          String            @default("pcs")
@@ -1471,6 +1581,8 @@ model InventoryItem {
 
   @@index([category])
   @@index([isActive])
+  @@unique([firmId, sku])
+  @@index([firmId])
   @@map("inventory_items")
 }
 
@@ -1521,8 +1633,10 @@ model InventoryTransaction {
 // ============================================================================
 
 model Supplier {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String  @id @default(cuid())
-  code          String  @unique
+  code          String
   name          String
   contactPerson String?
   phone         String?
@@ -1542,10 +1656,14 @@ model Supplier {
   returns          PurchaseReturn[]
 
   @@index([isActive])
+  @@unique([firmId, code])
+  @@index([firmId])
   @@map("suppliers")
 }
 
 model PurchaseOrder {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id         String              @id @default(cuid())
   poNumber   String              @unique
   supplierId String
@@ -1575,6 +1693,7 @@ model PurchaseOrder {
 
   @@index([supplierId])
   @@index([branchId, status])
+  @@index([firmId])
   @@map("purchase_orders")
 }
 
@@ -1725,6 +1844,8 @@ model PurchaseReturnItem {
 // ============================================================================
 
 model B2BAccount {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id                 String         @id @default(cuid())
   code               String         @unique
   businessName       String
@@ -1754,6 +1875,7 @@ model B2BAccount {
 
   @@index([type])
   @@index([isActive])
+  @@index([firmId])
   @@map("b2b_accounts")
 }
 
@@ -1843,6 +1965,8 @@ model B2BStatement {
 // ============================================================================
 
 model Complaint {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id              String            @id @default(cuid())
   complaintNumber String            @unique
   type            ComplaintType
@@ -1884,6 +2008,7 @@ model Complaint {
   @@index([orderId])
   @@index([garmentId])
   @@index([createdAt])
+  @@index([firmId])
   @@map("complaints")
 }
 
@@ -1984,6 +2109,8 @@ model NotificationLog {
 // ============================================================================
 
 model Expense {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String          @id @default(cuid())
   expenseNumber String          @unique
   branchId      String
@@ -2011,6 +2138,7 @@ model Expense {
 
   @@index([branchId, expenseDate])
   @@index([category])
+  @@index([firmId])
   @@map("expenses")
 }
 
@@ -2018,6 +2146,8 @@ model Expense {
 /// details so historical invoices never change; this row is the searchable
 /// directory and the place lifetime figures are rolled up.
 model Customer {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id       String @id @default(cuid())
   code     String @unique
   branchId String
@@ -2055,12 +2185,15 @@ model Customer {
   @@unique([branchId, phone])
   @@index([branchId, name])
   @@index([phone])
+  @@index([firmId])
   @@map("customers")
 }
 
 /// Append-only log of every tag scan, so the counter can see what was scanned,
 /// by whom, and what happened next.
 model ScanEvent {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id       String @id @default(cuid())
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -2083,6 +2216,7 @@ model ScanEvent {
 
   @@index([branchId, scannedAt])
   @@index([orderId])
+  @@index([firmId])
   @@map("scan_events")
 }
 
@@ -2212,6 +2346,8 @@ enum GarmentExceptionStatus {
 // ============================================================================
 
 model BankAccount {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id             String   @id @default(cuid())
   branchId       String
   branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -2233,6 +2369,7 @@ model BankAccount {
   reconciliations  Reconciliation[]
 
   @@index([branchId])
+  @@index([firmId])
   @@map("bank_accounts")
 }
 
@@ -2248,6 +2385,8 @@ model CashAccount {
 }
 
 model FinancialLedger {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id              String                   @id @default(cuid())
   branchId        String
   branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -2282,6 +2421,7 @@ model FinancialLedger {
   @@index([accountCategory])
   @@index([customerId])
   @@index([supplierId])
+  @@index([firmId])
   @@map("financial_ledgers")
 }
 
@@ -2331,6 +2471,8 @@ enum BankTxnType {
 }
 
 model CashTransaction {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id             String          @id @default(cuid())
   branchId       String
   branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -2348,6 +2490,7 @@ model CashTransaction {
   createdAt      DateTime        @default(now())
 
   @@index([branchId, txnDate])
+  @@index([firmId])
   @@map("cash_transactions")
 }
 
@@ -2440,19 +2583,25 @@ model WhatsAppLog {
 }
 
 model WhatsAppTemplate {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id        String              @id @default(cuid())
-  code      WhatsAppMessageType @unique
+  code      WhatsAppMessageType
   name      String
   body      String              @db.Text
   isActive  Boolean             @default(true)
   updatedAt DateTime            @updatedAt
+  @@unique([firmId, code])
+  @@index([firmId])
 
   @@map("whatsapp_templates")
 }
 
 model WhatsAppSession {
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id              String    @id @default(cuid())
-  sessionName     String    @unique @default("aurclean_session")
+  sessionName     String    @default("aurclean_session")
   isConnected     Boolean   @default(false)
   connectedNumber String?
   qrCode          String?   @db.Text
@@ -2460,6 +2609,8 @@ model WhatsAppSession {
   lastConnectedAt DateTime?
   updatedAt       DateTime  @updatedAt
 
+  @@unique([firmId, sessionName])
+  @@index([firmId])
   @@map("whatsapp_sessions")
 }
 

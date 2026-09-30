@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { resolveDateRange, type DateRangePreset } from "@/lib/dates";
 import { isGlobalRole } from "@/lib/rbac";
-import type { SessionUser } from "@/lib/session";
+import { requireFirmId, type SessionUser } from "@/lib/session";
 
 export type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -21,7 +21,7 @@ export function pageParam(params: SearchParams, key = "page"): number {
 export async function branchOptions(user: SessionUser) {
   if (isGlobalRole(user.role)) {
     const branches = await prisma.branch.findMany({
-      where: { isActive: true },
+      where: { firmId: requireFirmId(user), isActive: true },
       orderBy: [{ type: "asc" }, { name: "asc" }],
       select: { id: true, name: true, code: true },
     });

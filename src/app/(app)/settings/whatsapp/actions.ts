@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import {
   connectWhatsAppSession,
@@ -14,10 +14,10 @@ import {
 } from "@/lib/services/whatsapp";
 import type { WhatsAppMessageType } from "@/generated/prisma/client";
 
-export async function sendWhatsAppAction(params: SendWhatsAppParams) {
+export async function sendWhatsAppAction(params: Omit<SendWhatsAppParams, "firmId">) {
   try {
     const user = await requirePermission(PERMISSIONS.ORDER_VIEW);
-    const res = await sendWhatsAppMessage({ ...params, sentByUserId: user.id });
+    const res = await sendWhatsAppMessage({ ...params, firmId: requireFirmId(user), sentByUserId: user.id });
     return { ok: true, data: res };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to send WhatsApp message" };
@@ -26,8 +26,8 @@ export async function sendWhatsAppAction(params: SendWhatsAppParams) {
 
 export async function connectWhatsAppAction() {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-    const state = await connectWhatsAppSession();
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const state = await connectWhatsAppSession(requireFirmId(user));
     revalidatePath("/settings/whatsapp");
     return { ok: true, data: state };
   } catch (error) {
@@ -37,8 +37,8 @@ export async function connectWhatsAppAction() {
 
 export async function refreshWhatsAppAction() {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-    const state = await getWhatsAppStatus({ forceRefresh: true });
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const state = await getWhatsAppStatus(requireFirmId(user), { forceRefresh: true });
     revalidatePath("/settings/whatsapp");
     return { ok: true, data: state };
   } catch (error) {
@@ -48,8 +48,8 @@ export async function refreshWhatsAppAction() {
 
 export async function reconnectWhatsAppAction() {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-    const state = await reconnectWhatsAppSession();
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const state = await reconnectWhatsAppSession(requireFirmId(user));
     revalidatePath("/settings/whatsapp");
     return { ok: true, data: state };
   } catch (error) {
@@ -59,8 +59,8 @@ export async function reconnectWhatsAppAction() {
 
 export async function disconnectWhatsAppAction() {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-    const state = await disconnectWhatsAppSession();
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const state = await disconnectWhatsAppSession(requireFirmId(user));
     revalidatePath("/settings/whatsapp");
     return { ok: true, data: state };
   } catch (error) {
@@ -70,8 +70,8 @@ export async function disconnectWhatsAppAction() {
 
 export async function saveTemplateAction(code: WhatsAppMessageType, name: string, body: string) {
   try {
-    await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-    const template = await saveWhatsAppTemplate(code, name, body);
+    const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+    const template = await saveWhatsAppTemplate(requireFirmId(user), code, name, body);
     revalidatePath("/settings/whatsapp");
     return { ok: true, data: template };
   } catch (error) {

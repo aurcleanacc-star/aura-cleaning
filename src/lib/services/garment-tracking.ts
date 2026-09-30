@@ -137,8 +137,8 @@ export interface CategoryCount {
   issues: number;
 }
 
-function branchWhere(branchIds: string[] | null): Prisma.GarmentWhereInput {
-  return branchIds ? { branchId: { in: branchIds } } : {};
+function branchWhere(firmId: string, branchIds: string[] | null): Prisma.GarmentWhereInput {
+  return { firmId, ...(branchIds ? { branchId: { in: branchIds } } : {}) };
 }
 
 /**
@@ -146,9 +146,10 @@ function branchWhere(branchIds: string[] | null): Prisma.GarmentWhereInput {
  * right now. Delivered garments have left, so they are not counted.
  */
 export async function getCategoryCounts(
+  firmId: string,
   branchIds: string[] | null,
 ): Promise<CategoryCount[]> {
-  const where = branchWhere(branchIds);
+  const where = branchWhere(firmId, branchIds);
 
   // The tile count comes from the same engine the mismatch centre uses, so a
   // badge on the dashboard and the list behind it can never disagree.
@@ -163,7 +164,7 @@ export async function getCategoryCounts(
       where: { ...where, status: "READY" },
       _count: { _all: true },
     }),
-    detectMismatches({ branchIds }),
+    detectMismatches({ firmId, branchIds }),
   ]);
 
   const floorBy = new Map(onFloor.map((row) => [row.trackingCategory, row._count._all]));
@@ -256,6 +257,7 @@ const EMPTY_SUMMARY: MismatchSummary = {
 };
 
 export async function getCategoryPage(params: {
+  firmId: string;
   category: TrackingCategory;
   branchIds: string[] | null;
   search?: string;
@@ -271,13 +273,14 @@ export async function getCategoryPage(params: {
   const search = params.search?.trim();
 
   const findings = await detectMismatches({
+    firmId: params.firmId,
     branchIds: params.branchIds,
     category: params.category,
   });
   const findingByGarment = new Map(findings.map((f) => [f.garmentId, f]));
 
   const where: Prisma.GarmentWhereInput = {
-    ...branchWhere(params.branchIds),
+    ...branchWhere(params.firmId, params.branchIds),
     trackingCategory: params.category,
     ...(params.includeDelivered ? {} : { status: { notIn: CLOSED_GARMENT_STATUSES } }),
     ...(params.stage && params.stage !== "all"
@@ -381,13 +384,14 @@ export async function getCategoryPage(params: {
 }
 
 async function countCategory(params: {
+  firmId: string;
   category: TrackingCategory;
   branchIds: string[] | null;
   includeDelivered?: boolean;
 }): Promise<number> {
   return prisma.garment.count({
     where: {
-      ...branchWhere(params.branchIds),
+      ...branchWhere(params.firmId, params.branchIds),
       trackingCategory: params.category,
       ...(params.includeDelivered ? {} : { status: { notIn: CLOSED_GARMENT_STATUSES } }),
     },
@@ -452,12 +456,13 @@ const KIND_RANK: MismatchKind[] = [
  * in `GarmentException` until someone closes them.
  */
 export async function detectMismatches(params: {
+  firmId: string;
   branchIds: string[] | null;
   category?: TrackingCategory | null;
   limit?: number;
 }): Promise<MismatchFinding[]> {
   const where: Prisma.GarmentWhereInput = {
-    ...branchWhere(params.branchIds),
+    ...branchWhere(params.firmId, params.branchIds),
     ...(params.category ? { trackingCategory: params.category } : {}),
     status: { notIn: CLOSED_GARMENT_STATUSES },
   };
@@ -654,7 +659,10 @@ export function summarise(findings: MismatchFinding[], total: number): MismatchS
 }
 
 /** The mismatch centre's headline: one row per category. */
-export async function getMismatchOverview(branchIds: string[] | null): Promise<
+export async function getMismatchOverview(
+  firmId: string,
+  branchIds: string[] | null,
+): Promise<
   Array<{
     category: TrackingCategory;
     label: string;
@@ -663,11 +671,11 @@ export async function getMismatchOverview(branchIds: string[] | null): Promise<
   }>
 > {
   const [findings, totals] = await Promise.all([
-    detectMismatches({ branchIds }),
+    detectMismatches({ firmId, branchIds }),
     prisma.garment.groupBy({
       by: ["trackingCategory"],
       where: {
-        ...branchWhere(branchIds),
+        ...branchWhere(firmId, branchIds),
         status: { notIn: CLOSED_GARMENT_STATUSES },
       },
       _count: { _all: true },

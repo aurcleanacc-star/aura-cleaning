@@ -19,7 +19,7 @@ import { GarmentTools } from "@/app/(app)/garments/[code]/garment-tools";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime, formatTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
-import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, assertFirmAccess, hasPermission, requirePermission } from "@/lib/session";
 import { humanize } from "@/lib/utils";
 import {
   GARMENT_STATUS_LABELS,
@@ -89,6 +89,7 @@ export default async function GarmentDetailPage({
 
   if (!garment) notFound();
   assertBranchAccess(user, garment.branchId);
+  assertFirmAccess(user, garment.firmId);
 
   // The next station on this garment's own route, which is what "update
   // status" advances it to.

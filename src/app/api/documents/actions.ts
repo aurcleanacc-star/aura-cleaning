@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/session";
+import { requireFirmId, requirePermission } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { sendDocumentToWhatsApp, type DocumentType } from "@/lib/services/whatsapp-document";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +20,7 @@ export async function sendDocumentWhatsAppAction(params: {
 
   try {
     const result = await sendDocumentToWhatsApp({
+      firmId: requireFirmId(session),
       documentType: params.documentType,
       documentId: params.documentId,
       sentByUserId: session.id,
@@ -47,7 +48,8 @@ export async function sendDocumentWhatsAppAction(params: {
 import type { CompanyProfile } from "@/lib/pdf/pdf-builder";
 
 export async function saveCompanyDocumentSettingsAction(data: Partial<CompanyProfile> & { name: string }) {
-  await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+  const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+  const firmId = requireFirmId(user);
 
   const updates = [
     { key: "company_name", value: data.name ?? "", category: "company" },
@@ -66,8 +68,8 @@ export async function saveCompanyDocumentSettingsAction(data: Partial<CompanyPro
   await Promise.all(
     updates.map((item) =>
       prisma.setting.upsert({
-        where: { key: item.key },
-        create: { key: item.key, value: item.value, category: item.category },
+        where: { firmId_key: { firmId, key: item.key } },
+        create: { firmId, key: item.key, value: item.value, category: item.category },
         update: { value: item.value, category: item.category },
       }),
     ),

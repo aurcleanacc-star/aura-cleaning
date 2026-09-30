@@ -9,6 +9,7 @@ import { MISMATCH_LABELS, detectMismatches } from "@/lib/services/garment-tracki
 import { STAGE_LABELS } from "@/lib/workflow";
 
 export interface DashboardFilters {
+  firmId: string;
   branchId?: string;
   range?: DateRange;
   serviceId?: string;
@@ -17,6 +18,7 @@ export interface DashboardFilters {
 
 function orderWhere(filters: DashboardFilters): Prisma.OrderWhereInput {
   return {
+    firmId: filters.firmId,
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.serviceId ? { items: { some: { serviceId: filters.serviceId } } } : {}),
     ...(filters.status ? { status: filters.status as never } : {}),
@@ -48,7 +50,7 @@ export async function dashboardMetrics(
   filters: DashboardFilters,
 ): Promise<DashboardMetrics> {
   const today = todayRange();
-  const branchFilter = filters.branchId ? { branchId: filters.branchId } : {};
+  const branchFilter = { firmId: filters.firmId, ...(filters.branchId ? { branchId: filters.branchId } : {}) };
   const base = orderWhere(filters);
   const now = new Date();
 
@@ -95,7 +97,10 @@ export async function dashboardMetrics(
       _sum: { outstandingAmount: true },
     }),
     prisma.inventoryStock.findMany({
-      where: { ...branchFilter, item: { isActive: true } },
+      where: {
+        ...(filters.branchId ? { branchId: filters.branchId } : {}),
+        item: { firmId: filters.firmId, isActive: true },
+      },
       select: { quantity: true, item: { select: { minStockLevel: true } } },
     }),
     prisma.complaint.count({
@@ -163,6 +168,7 @@ export async function revenueSeries(
 
   const orders = await prisma.order.findMany({
     where: {
+      firmId: filters.firmId,
       ...(filters.branchId ? { branchId: filters.branchId } : {}),
       ...(filters.serviceId
         ? { items: { some: { serviceId: filters.serviceId } } }
@@ -273,11 +279,12 @@ export interface BranchPerformance {
 }
 
 export async function branchPerformance(
+  firmId: string,
   range?: DateRange,
 ): Promise<BranchPerformance[]> {
   const now = new Date();
   const branches = await prisma.branch.findMany({
-    where: { isActive: true },
+    where: { firmId, isActive: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -336,6 +343,7 @@ export async function operationsMetrics(
   const base = orderWhere(filters);
   const now = new Date();
   const garmentWhere = {
+    firmId: filters.firmId,
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.range
       ? { createdAt: { gte: filters.range.from, lte: filters.range.to } }
@@ -374,6 +382,7 @@ export async function operationsMetrics(
       where: {
         stage: "QUALITY_CHECK",
         status: "FAILED",
+        branch: { firmId: filters.firmId },
         ...(filters.branchId ? { branchId: filters.branchId } : {}),
         ...(filters.range
           ? { updatedAt: { gte: filters.range.from, lte: filters.range.to } }
@@ -384,6 +393,7 @@ export async function operationsMetrics(
       where: {
         stage: "QUALITY_CHECK",
         status: { in: ["PASSED", "FAILED"] },
+        branch: { firmId: filters.firmId },
         ...(filters.branchId ? { branchId: filters.branchId } : {}),
         ...(filters.range
           ? { updatedAt: { gte: filters.range.from, lte: filters.range.to } }
@@ -434,6 +444,7 @@ export async function deliveryMetrics(
   filters: DashboardFilters,
 ): Promise<DeliveryMetrics> {
   const where: Prisma.DeliveryWhereInput = {
+    firmId: filters.firmId,
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.range
       ? { scheduledAt: { gte: filters.range.from, lte: filters.range.to } }
@@ -502,7 +513,7 @@ export interface FinanceMetrics {
 export async function financeMetrics(
   filters: DashboardFilters,
 ): Promise<FinanceMetrics> {
-  const branchFilter = filters.branchId ? { branchId: filters.branchId } : {};
+  const branchFilter = { firmId: filters.firmId, ...(filters.branchId ? { branchId: filters.branchId } : {}) };
   const rangeFilter = filters.range
     ? { gte: filters.range.from, lte: filters.range.to }
     : undefined;
@@ -536,6 +547,7 @@ export async function financeMetrics(
     prisma.refund.aggregate({
       where: {
         status: "PROCESSED",
+        order: { firmId: filters.firmId },
         ...(rangeFilter ? { processedAt: rangeFilter } : {}),
       },
       _sum: { amount: true },
@@ -549,7 +561,10 @@ export async function financeMetrics(
       _sum: { amount: true },
     }),
     prisma.purchaseInvoice.findMany({
-      where: { status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] } },
+      where: {
+        status: { in: ["UNPAID", "PARTIALLY_PAID", "OVERDUE"] },
+        supplier: { firmId: filters.firmId },
+      },
       select: { total: true, amountPaid: true },
     }),
   ]);
@@ -581,10 +596,11 @@ export async function financeMetrics(
 }
 
 /** Stage-by-stage queue depth, for the dashboard's processing chart. */
-export async function stagePipeline(branchId?: string) {
+export async function stagePipeline(firmId: string, branchId?: string) {
   const groups = await prisma.processingTask.groupBy({
     by: ["stage", "status"],
     where: {
+      branch: { firmId },
       ...(branchId ? { branchId } : {}),
       status: { in: ["PENDING", "IN_PROGRESS"] },
     },
@@ -633,7 +649,10 @@ export interface GarmentReport {
  * it derived from the same engine the mismatch centre uses, so a report and the
  * screen it summarises can never tell different stories.
  */
-export async function garmentReport(filters: DashboardFilters): Promise<GarmentReport> {
+export async function garmentReport(
+  filters: DashboardFilters,
+  firmId: string,
+): Promise<GarmentReport> {
   const branchIds = filters.branchId ? [filters.branchId] : null;
   const branchWhere = filters.branchId ? { branchId: filters.branchId } : {};
   const window = filters.range
@@ -643,31 +662,32 @@ export async function garmentReport(filters: DashboardFilters): Promise<GarmentR
   const [onFloor, ready, delivered, findings, scans, missingRows] = await Promise.all([
     prisma.garment.groupBy({
       by: ["trackingCategory"],
-      where: { ...branchWhere, status: { notIn: ["DELIVERED", "RETURNED"] } },
+      where: { firmId, ...branchWhere, status: { notIn: ["DELIVERED", "RETURNED"] } },
       _count: { _all: true },
     }),
     prisma.garment.groupBy({
       by: ["trackingCategory"],
-      where: { ...branchWhere, status: "READY" },
+      where: { firmId, ...branchWhere, status: "READY" },
       _count: { _all: true },
     }),
     prisma.garment.groupBy({
       by: ["trackingCategory"],
       where: {
+        firmId,
         ...branchWhere,
         status: "DELIVERED",
         ...(window ? { deliveredAt: window } : {}),
       },
       _count: { _all: true },
     }),
-    detectMismatches({ branchIds }),
+    detectMismatches({ firmId, branchIds }),
     prisma.garmentScan.groupBy({
       by: ["stage", "outcome"],
-      where: { ...branchWhere, ...(window ? { scannedAt: window } : {}) },
+      where: { garment: { firmId }, ...branchWhere, ...(window ? { scannedAt: window } : {}) },
       _count: { _all: true },
     }),
     prisma.garmentException.findMany({
-      where: { ...branchWhere, type: "MISSING", status: "OPEN" },
+      where: { branch: { firmId }, ...branchWhere, type: "MISSING", status: "OPEN" },
       orderBy: { reportedAt: "desc" },
       take: 25,
       select: {
