@@ -134,32 +134,38 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
     (code: string, source: "KEYBOARD" | "CAMERA" = "KEYBOARD") =>
       new Promise<void>((resolve) => {
         startTransition(async () => {
-          const res = await scanGarmentAction({
-            code,
-            source,
-            contextOrderId: context?.id ?? null,
-          });
-          if (!res.ok) {
-            toast.error(res.error);
-            if (soundEnabled) playAudioFeedback("NOT_FOUND");
+          try {
+            const res = await scanGarmentAction({
+              code,
+              source,
+              contextOrderId: context?.id ?? null,
+            });
+            if (!res.ok) {
+              toast.error(res.error);
+              if (soundEnabled) playAudioFeedback("NOT_FOUND");
+              resolve();
+              return;
+            }
+
+            setResult(res.data);
+            if (soundEnabled) {
+              playAudioFeedback(res.data.kind);
+            }
+
+            if (res.data.kind === "FOUND") {
+              toast.success(res.data.message);
+            } else if (res.data.kind === "DUPLICATE") {
+              toast.info(res.data.message);
+            } else {
+              toast.error(res.data.message);
+            }
+            refreshHistory();
+          } catch (err) {
+            console.error("Scan processing error:", err);
+            toast.error("Failed to process scan. Please try again.");
+          } finally {
             resolve();
-            return;
           }
-
-          setResult(res.data);
-          if (soundEnabled) {
-            playAudioFeedback(res.data.kind);
-          }
-
-          if (res.data.kind === "FOUND") {
-            toast.success(res.data.message);
-          } else if (res.data.kind === "DUPLICATE") {
-            toast.info(res.data.message);
-          } else {
-            toast.error(res.data.message);
-          }
-          refreshHistory();
-          resolve();
         });
       }),
     [context, refreshHistory, soundEnabled],

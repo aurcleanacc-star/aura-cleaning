@@ -153,36 +153,41 @@ export function BatchScanner() {
       const alreadyCodes = scans.map((s) => s.garmentCode).filter((c): c is string => Boolean(c));
 
       startTransition(async () => {
-        const res = await batchScanGarmentAction({
-          code,
-          operation: operation === "NONE" ? null : operation,
-          contextOrderId: contextOrderId ?? undefined,
-          autoAdvance,
-          alreadyScannedCodes: alreadyCodes,
-        });
+        try {
+          const res = await batchScanGarmentAction({
+            code,
+            operation: operation === "NONE" ? null : operation,
+            contextOrderId: contextOrderId ?? undefined,
+            autoAdvance,
+            alreadyScannedCodes: alreadyCodes,
+          });
 
-        if (res.ok) {
-          const item = res.data;
-          setScans((prev) => [item, ...prev]);
+          if (res.ok) {
+            const item = res.data;
+            setScans((prev) => [item, ...prev]);
 
-          if (soundEnabled) {
-            playAudioFeedback(item.outcome);
-          }
+            if (soundEnabled) {
+              playAudioFeedback(item.outcome);
+            }
 
-          if (item.outcome === "MATCHED") {
-            toast.success(item.message, { duration: 1500 });
-          } else if (item.outcome === "DUPLICATE") {
-            toast.info(item.message, { duration: 2000 });
-          } else if (item.outcome === "MISMATCH") {
-            toast.error(`MISMATCH: ${item.message}`, { duration: 3000 });
+            if (item.outcome === "MATCHED") {
+              toast.success(item.message, { duration: 1500 });
+            } else if (item.outcome === "DUPLICATE") {
+              toast.info(item.message, { duration: 2000 });
+            } else if (item.outcome === "MISMATCH") {
+              toast.error(`MISMATCH: ${item.message}`, { duration: 3000 });
+            } else {
+              toast.error(item.message, { duration: 3000 });
+            }
           } else {
-            toast.error(item.message, { duration: 3000 });
+            toast.error(res.error);
           }
-        } else {
-          toast.error(res.error);
+        } catch (err) {
+          console.error("Batch scan error:", err);
+          toast.error("Failed to process batch scan item");
+        } finally {
+          setTimeout(() => inputRef.current?.focus(), 50);
         }
-
-        setTimeout(() => inputRef.current?.focus(), 50);
       });
     },
     [active, autoAdvance, contextOrderId, operation, pending, scans, soundEnabled],

@@ -48,11 +48,16 @@ export function Scanner({
   const [busy, setBusy] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
-  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
-  const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
-  const regionId = useId().replace(/:/g, "");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scannerInstanceRef = useRef<any>(null);
+  const isStartingRef = useRef(false);
+
+  const rawId = useId();
+  const regionId = `scanner_region_${rawId.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   const submit = useCallback(
     async (raw: string) => {
@@ -71,6 +76,8 @@ export function Scanner({
       setBusy(true);
       try {
         await onScan(code, mode);
+      } catch (err) {
+        console.error("Scan handler error:", err);
       } finally {
         setBusy(false);
         setValue("");
@@ -81,91 +88,163 @@ export function Scanner({
   );
 
   // Camera lifecycle. html5-qrcode touches the DOM directly, so it is loaded
-  // lazily and always torn down when the mode, or the chosen camera, changes.
+  // lazily and always safely torn down when the mode, or the chosen camera, changes.
   useEffect(() => {
     if (mode !== "camera") return;
 
     let cancelled = false;
     setCameraError(null);
     setCameraStarting(true);
+    isStartingRef.current = true;
 
-    (async () => {
+    const startCamera = async () => {
       try {
+        // Check if camera is available on this device/context
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia
+        ) {
+          throw new Error("Camera API is not supported in this browser or context.");
+        }
+
         const { Html5Qrcode } = await import("html5-qrcode");
         if (cancelled) return;
 
-        // Enumerate available cameras once per session so a device with more
-        // than one (front + back, or several on a tablet) can switch between
-        // them. This call itself triggers the browser's permission prompt on
-        // first use.
-        let target: string | { facingMode: string } = { facingMode: "environment" };
-        if (!activeCameraId) {
-          try {
-            const devices = await Html5Qrcode.getCameras();
-            if (!cancelled && devices.length > 0) {
-              setCameras(devices);
-              const rear = devices.find((d) => /back|rear|environment/i.test(d.label));
-              const chosen = (rear ?? devices[devices.length - 1]).id;
-              setActiveCameraId(chosen);
-              target = chosen;
-            }
-          } catch {
-            // Enumeration can fail even when a plain getUserMedia stream
-            // would succeed (e.g. before permission is granted on some
-            // browsers) — fall back to the generic rear-camera request.
-          }
-        } else {
-          target = activeCameraId;
+        // Ensure DOM container exists
+        const container = document.getElementById(regionId);
+        if (!container) {
+          // Wait a tick for React to finish rendering the DOM node
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          if (cancelled) return;
         }
 
-        const instance = new Html5Qrcode(regionId, { verbose: false });
-        scannerRef.current = {
-          stop: () => instance.stop(),
-          clear: () => instance.clear(),
-        };
+        // Clean up any lingering previous instance before starting fresh
+        if (scannerInstanceRef.current) {
+          try {
+            if (scannerInstanceRef.current.isScanning) {
+              await scannerInstanceRef.current.stop();
+            }
+            scannerInstanceRef.current.clear();
+          } catch {
+            // Ignore teardown errors of previous instance
+          }
+          scannerInstanceRef.current = null;
+        }
+
+        if (cancelled) return;
+
+        // Discover cameras once if not yet discovered
+        let targetCamera: string | { facingMode: string } = selectedCameraId
+          ? selectedCameraId
+          : { facingMode: "environment" };
+
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (!cancelled && devices && devices.length > 0) {
+            setCameras(devices);
+            if (!selectedCameraId) {
+              const rear = devices.find((d) => /back|rear|environment/i.test(d.label));
+              const chosen = (rear ?? devices[devices.length - 1]).id;
+              targetCamera = chosen;
+            }
+          }
+        } catch {
+          // Fallback to environment facing mode if getCameras fails
+          targetCamera = { facingMode: "environment" };
+        }
+
+        if (cancelled) return;
+
+        const instance = new Html5Qrcode(regionId, {
+          verbose: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
+        });
+        scannerInstanceRef.current = instance;
 
         await instance.start(
-          target,
-          { fps: 12, qrbox: { width: 240, height: 240 } },
+          targetCamera,
+          {
+            fps: 12,
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+              const size = Math.floor(minDim * 0.75);
+              return { width: Math.max(160, Math.min(size, 280)), height: Math.max(160, Math.min(size, 280)) };
+            },
+            aspectRatio: 1.0,
+          },
           (decoded) => {
-            void submit(decoded);
+            if (!cancelled && decoded) {
+              void submit(decoded);
+            }
           },
           () => {
-            // Per-frame decode misses are expected; nothing to report.
+            // Per-frame decode misses are expected
           },
         );
-        if (!cancelled) setCameraStarting(false);
+
+        if (!cancelled) {
+          setCameraStarting(false);
+          isStartingRef.current = false;
+        }
       } catch (error) {
         if (!cancelled) {
           setCameraStarting(false);
-          const message =
-            error instanceof Error ? error.message : String(error);
+          isStartingRef.current = false;
+          const message = error instanceof Error ? error.message : String(error);
           setCameraError(
-            /permission|notallowed/i.test(message)
-              ? "Camera access was denied. Allow camera permission in your browser and try again."
+            /permission|notallowed|denied/i.test(message)
+              ? "Camera access was denied. Please allow camera permissions in your browser and try again."
               : /notfound|no camera/i.test(message)
                 ? "No camera was found on this device."
-                : "Unable to start the camera. Check browser permissions.",
+                : "Unable to start camera stream. Check camera permissions or switch to manual input.",
           );
           setMode("keyboard");
         }
       }
-    })();
+    };
+
+    void startCamera();
 
     return () => {
       cancelled = true;
-      const current = scannerRef.current;
-      scannerRef.current = null;
-      if (current) {
-        current
-          .stop()
-          .then(() => current.clear())
-          .catch(() => {
-            /* already stopped */
-          });
+      isStartingRef.current = false;
+      const instance = scannerInstanceRef.current;
+      scannerInstanceRef.current = null;
+      if (instance) {
+        try {
+          if (instance.isScanning) {
+            instance
+              .stop()
+              .then(() => {
+                try {
+                  instance.clear();
+                } catch {
+                  // Ignore cleanup errors
+                }
+              })
+              .catch(() => {
+                // Ignore stop errors on unmount
+              });
+          } else {
+            try {
+              instance.clear();
+            } catch {
+              // Ignore cleanup errors
+            }
+          }
+        } catch {
+          // Ignore sync errors
+        }
       }
     };
-  }, [mode, activeCameraId, regionId, submit]);
+  }, [mode, selectedCameraId, regionId, submit]);
+
+  const handleCameraChange = (cameraId: string) => {
+    setSelectedCameraId(cameraId);
+  };
 
   const keyboardInput = (
     <div className="flex gap-2">
@@ -197,7 +276,7 @@ export function Scanner({
           type="button"
           variant={mode === "camera" ? "default" : "outline"}
           size="icon"
-          className="h-12 w-12"
+          className="h-12 w-12 shrink-0"
           onClick={() => setMode((m) => (m === "camera" ? "keyboard" : "camera"))}
           aria-label={mode === "camera" ? "Switch to keyboard entry" : "Scan with camera"}
           disabled={disabled}
@@ -221,7 +300,7 @@ export function Scanner({
         >
           {mode === "camera" ? (
             <>
-              <div id={regionId} className="w-full max-w-sm" />
+              <div id={regionId} className="w-full max-w-sm overflow-hidden" suppressHydrationWarning />
               {!cameraStarting ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="scan-frame relative size-56 max-w-[70%]">
@@ -233,12 +312,12 @@ export function Scanner({
                   </div>
                 </div>
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
-                  <Loader2 className="size-6 animate-spin" />
-                  <p className="text-sm">Starting camera…</p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-black/80">
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                  <p className="text-sm">Starting camera stream…</p>
                 </div>
               )}
-              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2">
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 z-10">
                 <Button
                   type="button"
                   variant="secondary"
@@ -251,8 +330,8 @@ export function Scanner({
                   <select
                     aria-label="Choose camera"
                     className="h-8 rounded-md border border-border bg-secondary px-2 text-xs font-medium text-secondary-foreground"
-                    value={activeCameraId ?? ""}
-                    onChange={(event) => setActiveCameraId(event.target.value)}
+                    value={selectedCameraId ?? ""}
+                    onChange={(event) => handleCameraChange(event.target.value)}
                   >
                     {cameras.map((camera) => (
                       <option key={camera.id} value={camera.id}>
@@ -289,14 +368,14 @@ export function Scanner({
             )}
             aria-hidden
           />
-          {mode === "camera" ? (cameraStarting ? "Starting…" : "Scanning…") : "Camera idle"}
+          {mode === "camera" ? (cameraStarting ? "Starting…" : "Camera active") : "Camera idle"}
         </div>
 
         {keyboardInput}
 
         {cameraError ? (
-          <p className="flex items-center gap-1.5 text-xs text-destructive">
-            <CameraOff className="size-3.5" /> {cameraError}
+          <p className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 p-2.5 rounded-lg border border-destructive/20">
+            <CameraOff className="size-3.5 shrink-0" /> {cameraError}
           </p>
         ) : null}
       </div>
@@ -308,14 +387,14 @@ export function Scanner({
       {keyboardInput}
 
       {mode === "camera" ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-black/90">
-          <div id={regionId} className="mx-auto w-full max-w-sm" />
+        <div className="overflow-hidden rounded-lg border border-border bg-black/90 p-2">
+          <div id={regionId} className="mx-auto w-full max-w-sm" suppressHydrationWarning />
         </div>
       ) : null}
 
       {cameraError ? (
-        <p className="flex items-center gap-1.5 text-xs text-destructive">
-          <CameraOff className="size-3.5" /> {cameraError}
+        <p className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 p-2.5 rounded-lg border border-destructive/20">
+          <CameraOff className="size-3.5 shrink-0" /> {cameraError}
         </p>
       ) : null}
     </div>
