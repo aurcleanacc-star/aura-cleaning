@@ -478,7 +478,7 @@ export function BatchScanner() {
               <Scanner
                 variant="compact"
                 placeholder="Scan using device camera stream..."
-                onScan={(code) => processScan(code)}
+                onScan={processScan}
                 debounceMs={1200}
               />
             </div>

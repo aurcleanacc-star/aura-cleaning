@@ -206,6 +206,13 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
             ? "Mismatch detected"
             : "Tag not found";
 
+  const handleScan = useCallback(
+    (code: string, source: "keyboard" | "camera") => {
+      return runScan(code, source === "camera" ? "CAMERA" : "KEYBOARD");
+    },
+    [runScan],
+  );
+
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="min-w-0 space-y-5">
@@ -277,9 +284,9 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
             >
               <Scanner
                 variant="workstation"
-                onScan={(code, source) => runScan(code, source === "camera" ? "CAMERA" : "KEYBOARD")}
+                onScan={handleScan}
                 placeholder="Scan tag (TR-1042-01) or type code..."
-                debounceMs={600}
+                debounceMs={1200}
               />
             </div>
 

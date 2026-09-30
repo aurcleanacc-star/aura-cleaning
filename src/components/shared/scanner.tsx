@@ -32,6 +32,9 @@ interface ScannerProps {
  * Keyboard mode is the default because hardware barcode guns behave like
  * keyboards and are what most counters use; camera mode covers phones and
  * tablets on the shop floor. Both funnel into the same `onScan` callback.
+ * 
+ * Supports continuous / unlimited camera scanning without shutting down
+ * between scans.
  */
 export function Scanner({
   onScan,
@@ -49,18 +52,24 @@ export function Scanner({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scannerInstanceRef = useRef<any>(null);
-  const isStartingRef = useRef(false);
+  const onScanRef = useRef(onScan);
+
+  // Keep latest onScan function in a ref so scan callbacks never cause camera re-initialisation
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   const rawId = useId();
   const regionId = `scanner_region_${rawId.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   const submit = useCallback(
-    async (raw: string) => {
+    async (raw: string, source: "keyboard" | "camera" = "keyboard") => {
       const code = raw.trim();
       if (!code || disabled) return;
 
@@ -72,10 +81,11 @@ export function Scanner({
         return;
       }
       lastScanRef.current = { code, at: now };
+      setLastScannedCode(code);
 
       setBusy(true);
       try {
-        await onScan(code, mode);
+        await onScanRef.current(code, source);
       } catch (err) {
         console.error("Scan handler error:", err);
       } finally {
@@ -84,22 +94,25 @@ export function Scanner({
         inputRef.current?.focus();
       }
     },
-    [onScan, disabled, debounceMs, mode],
+    [disabled, debounceMs],
   );
 
-  // Camera lifecycle. html5-qrcode touches the DOM directly, so it is loaded
-  // lazily and always safely torn down when the mode, or the chosen camera, changes.
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  }, [submit]);
+
+  // Camera lifecycle. The camera runs continuously and is only started or
+  // stopped when `mode` or `selectedCameraId` explicitly changes.
   useEffect(() => {
     if (mode !== "camera") return;
 
     let cancelled = false;
     setCameraError(null);
     setCameraStarting(true);
-    isStartingRef.current = true;
 
     const startCamera = async () => {
       try {
-        // Check if camera is available on this device/context
         if (
           typeof navigator === "undefined" ||
           !navigator.mediaDevices ||
@@ -114,7 +127,6 @@ export function Scanner({
         // Ensure DOM container exists
         const container = document.getElementById(regionId);
         if (!container) {
-          // Wait a tick for React to finish rendering the DOM node
           await new Promise((resolve) => setTimeout(resolve, 50));
           if (cancelled) return;
         }
@@ -134,7 +146,6 @@ export function Scanner({
 
         if (cancelled) return;
 
-        // Discover cameras once if not yet discovered
         let targetCamera: string | { facingMode: string } = selectedCameraId
           ? selectedCameraId
           : { facingMode: "environment" };
@@ -150,7 +161,6 @@ export function Scanner({
             }
           }
         } catch {
-          // Fallback to environment facing mode if getCameras fails
           targetCamera = { facingMode: "environment" };
         }
 
@@ -167,7 +177,7 @@ export function Scanner({
         await instance.start(
           targetCamera,
           {
-            fps: 12,
+            fps: 15,
             qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
               const minDim = Math.min(viewfinderWidth, viewfinderHeight);
               const size = Math.floor(minDim * 0.75);
@@ -177,22 +187,21 @@ export function Scanner({
           },
           (decoded) => {
             if (!cancelled && decoded) {
-              void submit(decoded);
+              // Submit using the latest ref without restarting the stream
+              void submitRef.current(decoded, "camera");
             }
           },
           () => {
-            // Per-frame decode misses are expected
+            // Frame miss is standard behavior
           },
         );
 
         if (!cancelled) {
           setCameraStarting(false);
-          isStartingRef.current = false;
         }
       } catch (error) {
         if (!cancelled) {
           setCameraStarting(false);
-          isStartingRef.current = false;
           const message = error instanceof Error ? error.message : String(error);
           setCameraError(
             /permission|notallowed|denied/i.test(message)
@@ -210,7 +219,6 @@ export function Scanner({
 
     return () => {
       cancelled = true;
-      isStartingRef.current = false;
       const instance = scannerInstanceRef.current;
       scannerInstanceRef.current = null;
       if (instance) {
@@ -240,7 +248,7 @@ export function Scanner({
         }
       }
     };
-  }, [mode, selectedCameraId, regionId, submit]);
+  }, [mode, selectedCameraId, regionId]);
 
   const handleCameraChange = (cameraId: string) => {
     setSelectedCameraId(cameraId);
@@ -252,7 +260,7 @@ export function Scanner({
         className="relative flex-1"
         onSubmit={(event) => {
           event.preventDefault();
-          void submit(value);
+          void submit(value, "keyboard");
         }}
       >
         <Input
@@ -348,9 +356,9 @@ export function Scanner({
                 <ScanLine className="size-8" />
               </span>
               <div>
-                <p className="font-medium">Ready to scan</p>
+                <p className="font-medium">Continuous Scanner Ready</p>
                 <p className="text-sm text-muted-foreground">
-                  Start the camera, or scan/type below.
+                  Start camera stream for uninterrupted continuous scanning, or scan/type below.
                 </p>
               </div>
               <Button type="button" size="lg" onClick={() => setMode("camera")} disabled={disabled}>
@@ -360,15 +368,28 @@ export function Scanner({
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 text-sm font-medium">
-          <span
-            className={cn(
-              "size-2 rounded-full",
-              mode === "camera" ? "animate-pulse bg-success" : "bg-muted-foreground/40",
-            )}
-            aria-hidden
-          />
-          {mode === "camera" ? (cameraStarting ? "Starting…" : "Camera active") : "Camera idle"}
+        <div className="flex items-center justify-between gap-1.5 text-xs font-medium px-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                mode === "camera" ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40",
+              )}
+              aria-hidden
+            />
+            <span className="text-muted-foreground">
+              {mode === "camera"
+                ? cameraStarting
+                  ? "Initializing camera stream…"
+                  : "Live camera scanner active (unlimited continuous scan)"
+                : "Hardware barcode / keyboard input ready"}
+            </span>
+          </div>
+          {lastScannedCode ? (
+            <span className="font-mono text-muted-foreground text-[11px]">
+              Last read: <strong className="text-foreground">{lastScannedCode}</strong>
+            </span>
+          ) : null}
         </div>
 
         {keyboardInput}
