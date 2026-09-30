@@ -57,7 +57,25 @@ export function toActionResult(error: unknown): ActionResult<never> {
     return fail(error.message);
   }
   if (isPrismaUniqueViolation(error)) {
-    return fail("A record with these details already exists");
+    const meta = (error as { meta?: { target?: string[] | string } })?.meta;
+    const target = Array.isArray(meta?.target)
+      ? meta.target.join(", ")
+      : typeof meta?.target === "string"
+        ? meta.target
+        : null;
+
+    const fieldErrors: FieldErrors = {};
+    if (Array.isArray(meta?.target)) {
+      for (const field of meta.target) {
+        fieldErrors[field] = [`This ${field} is already in use`];
+      }
+    }
+
+    const message = target
+      ? `A record with this ${target.replace(/_/g, " ")} already exists`
+      : "A record with these details already exists";
+
+    return fail(message, Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined);
   }
   if (isPrismaForeignKeyViolation(error)) {
     return fail("This record is referenced elsewhere and cannot be changed");
