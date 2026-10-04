@@ -45,6 +45,7 @@ import {
 } from "./actions";
 
 interface Props {
+  firmName: string;
   initialStatusData: WhatsAppStatusResponse;
   templates: Array<{
     id: string;
@@ -89,6 +90,18 @@ const STATUS_CONFIG: Record<
     icon: AlertTriangle,
     desc: "Manual action required on OpenWA session.",
   },
+  not_configured: {
+    label: "Not Connected",
+    badgeTone: "neutral",
+    icon: WifiOff,
+    desc: "This firm has no WhatsApp account linked yet. Click Connect WhatsApp to get a QR code.",
+  },
+  stopped: {
+    label: "Disconnected",
+    badgeTone: "neutral",
+    icon: WifiOff,
+    desc: "This firm's WhatsApp session is not running. Reconnect to resume.",
+  },
   disconnected: {
     label: "Disconnected",
     badgeTone: "neutral",
@@ -115,7 +128,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export function WhatsAppSettingsView({ initialStatusData, templates: initialTemplates }: Props) {
+export function WhatsAppSettingsView({ firmName, initialStatusData, templates: initialTemplates }: Props) {
   const [statusData, setStatusData] = useState<WhatsAppStatusResponse>(initialStatusData);
   const [templates, setTemplates] = useState(initialTemplates);
   const [editingTemplate, setEditingTemplate] = useState<{ code: WhatsAppMessageType; name: string; body: string } | null>(null);
@@ -142,7 +155,7 @@ export function WhatsAppSettingsView({ initialStatusData, templates: initialTemp
           if (json && json.success) {
             setStatusData(json);
             if (json.status === "ready") {
-              toast.success(`WhatsApp Connected! Linked to ${json.phoneNumber || "account"}`);
+              toast.success(`WhatsApp Connected! Linked to ${json.phoneNumber || "number unavailable"}`);
             }
           }
         }
@@ -279,6 +292,11 @@ export function WhatsAppSettingsView({ initialStatusData, templates: initialTemp
         title="WhatsApp Gateway Settings"
         description="Manage real OpenWA session connection, health diagnostics, and automated ERP message templates."
       />
+      <div className="rounded-lg border bg-muted/30 px-4 py-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Current firm</p>
+        <p className="text-sm font-bold">{firmName}</p>
+        <p className="text-xs text-muted-foreground">This WhatsApp login belongs to this firm only. Other firms connect their own accounts.</p>
+      </div>
 
       {/* Real-time Status Panel Header */}
       <Card className="border-border/60 shadow-sm">
@@ -369,7 +387,7 @@ export function WhatsAppSettingsView({ initialStatusData, templates: initialTemp
                 <p className="text-xs text-muted-foreground font-medium">WhatsApp Account / Number</p>
                 <p className="text-sm font-bold font-mono">
                   {statusData.connected
-                    ? statusData.phoneNumber || "Connected WhatsApp account"
+                    ? statusData.phoneNumber || "Number unavailable"
                     : "Number unavailable"}
                 </p>
               </div>
@@ -564,7 +582,7 @@ export function WhatsAppSettingsView({ initialStatusData, templates: initialTemp
                         WhatsApp Session Active & Connected
                       </h4>
                       <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                        Account: <span className="font-mono font-bold">{statusData.phoneNumber || "Connected WhatsApp account"}</span>
+                        Account: <span className="font-mono font-bold">{statusData.phoneNumber || "Number unavailable"}</span>
                       </p>
                     </div>
                   </div>

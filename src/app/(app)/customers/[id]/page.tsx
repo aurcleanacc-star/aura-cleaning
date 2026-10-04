@@ -49,7 +49,7 @@ export default async function CustomerProfilePage({
   assertBranchAccess(user, customer.branchId);
 
   const canBook = hasPermission(user, PERMISSIONS.ORDER_CREATE);
-  const waHistory = await getWhatsAppHistory({ customerId: id });
+  const waHistory = await getWhatsAppHistory(firmId, { customerId: id });
   const company = await getCompanyProfile(firmId);
 
   const columns: Column<(typeof customer.orders)[number]>[] = [

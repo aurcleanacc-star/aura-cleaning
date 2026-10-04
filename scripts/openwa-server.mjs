@@ -1,95 +1,195 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import QRCode from "qrcode";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from "@whiskeysockets/baileys";
 
 /**
- * Native OpenWA REST API Gateway Server for AURCLEAN Laundry ERP
- * Powered by Baileys socket engine - 100% native Node.js implementation
- * Zero dependency on wmic.exe, Puppeteer, or native OS binaries.
+ * Multi-session OpenWA REST gateway for AURCLEAN ERP (Baileys engine).
+ *
+ * Every ERP firm owns exactly one session id (wa_<firmId>), and every session
+ * has its own Baileys socket, its own credentials directory and therefore its
+ * own linked WhatsApp account. There is deliberately NO session-less route:
+ * every operation names the session it acts on, so a request can never fall
+ * through to "the" connected number.
  */
 
 const PORT = process.env.PORT || 8080;
-const API_KEY = process.env.OPENWA_API_KEY || "aurclean_secret_key";
-const SESSION_ID = process.env.OPENWA_SESSION_ID || process.env.OPENWA_SESSION || "aurclean_session";
-const SESSION_NAME = SESSION_ID;
-const AUTH_DIR = path.join(process.cwd(), "_whatsapp_auth");
+const API_KEY = process.env.OPENWA_API_KEY || "";
+const AUTH_ROOT = path.join(process.cwd(), "_whatsapp_auth");
+const WEBHOOK_URL = process.env.OPENWA_WEBHOOK_URL || "";
+// Credentials from the single-session era lived directly in AUTH_ROOT. They
+// are adopted by this one session id so the original firm keeps its login.
+const LEGACY_SESSION_ID = process.env.OPENWA_LEGACY_SESSION_ID || "aurclean_session";
 
-let sock = null;
-let status = "disconnected"; // disconnected | initializing | qr_ready | authenticating | ready | failed
-let qrBase64 = null;
-let phoneNumber = null;
-let lastConnectedAt = null;
+if (!API_KEY) {
+  console.error("OPENWA_API_KEY is not set. Refusing to start an unauthenticated WhatsApp gateway.");
+  process.exit(1);
+}
 
-async function startWhatsAppSocket() {
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
+
+/** @type {Map<string, {id:string, sock:any, status:string, qr:string|null, phone:string|null, lastConnectedAt:Date|null, stopped:boolean, retry:any}>} */
+const sessions = new Map();
+
+const authDirFor = (id) => path.join(AUTH_ROOT, id);
+
+function adoptLegacyCredentials(id) {
+  if (id !== LEGACY_SESSION_ID) return;
+  const dir = authDirFor(id);
+  if (fs.existsSync(dir) || !fs.existsSync(path.join(AUTH_ROOT, "creds.json"))) return;
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of fs.readdirSync(AUTH_ROOT)) {
+    const from = path.join(AUTH_ROOT, name);
+    if (fs.statSync(from).isFile()) fs.renameSync(from, path.join(dir, name));
+  }
+  console.log(`[gateway] Adopted legacy credentials into session "${id}"`);
+}
+
+function hasSavedCredentials(id) {
+  return fs.existsSync(path.join(authDirFor(id), "creds.json"));
+}
+
+async function notify(event) {
+  if (!WEBHOOK_URL) return;
   try {
-    status = "initializing";
-    console.log("⚡ [OpenWA Gateway] Initializing WhatsApp Web WebSocket connection...");
+    await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+      body: JSON.stringify(event),
+    });
+  } catch (err) {
+    console.warn(`[gateway] Webhook delivery failed: ${err?.message}`);
+  }
+}
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+function setStatus(s, status) {
+  if (s.status === status) return;
+  s.status = status;
+  notify({ event: "session.status", sessionId: s.id, status, phoneNumber: s.phone });
+}
+
+async function startSession(id) {
+  let s = sessions.get(id);
+  if (s?.sock && ["initializing", "qr_ready", "authenticating", "ready"].includes(s.status)) return s;
+  if (!s) {
+    s = { id, sock: null, status: "disconnected", qr: null, phone: null, lastConnectedAt: null, stopped: false, retry: null };
+    sessions.set(id, s);
+  }
+  s.stopped = false;
+  clearTimeout(s.retry);
+
+  try {
+    setStatus(s, "initializing");
+    adoptLegacyCredentials(id);
+    const { state, saveCreds } = await useMultiFileAuthState(authDirFor(id));
     const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
       version,
       auth: state,
-      // QR is handled below via the connection.update listener (rendered to
-      // a data URL and served over the REST API) — printQRInTerminal is a
-      // deprecated Baileys option that only logs the raw QR to the process's
-      // own terminal and does nothing this server needs.
       browser: ["AURCLEAN ERP", "Chrome", "1.0.0"],
       connectTimeoutMs: 30000,
       defaultQueryTimeoutMs: 30000,
     });
+    s.sock = sock;
 
     sock.ev.on("creds.update", saveCreds);
 
+    sock.ev.on("messages.update", (updates) => {
+      for (const u of updates) {
+        const code = u.update?.status;
+        // Baileys: 3 = delivered to device, 4 = read.
+        const status = code === 4 ? "READ" : code === 3 ? "DELIVERED" : null;
+        if (status && u.key?.id && u.key.fromMe) {
+          notify({ event: "message.ack", sessionId: id, messageId: u.key.id, status });
+        }
+      }
+    });
+
     sock.ev.on("connection.update", async (update) => {
+      // Ignore events from a socket that has since been replaced or stopped.
+      if (s.sock !== sock) return;
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        status = "qr_ready";
         try {
-          qrBase64 = await QRCode.toDataURL(qr);
-          console.log("\n📷 [OpenWA Gateway] Real WhatsApp QR Code issued! Scan with WhatsApp on your phone.\n");
+          s.qr = await QRCode.toDataURL(qr);
+          setStatus(s, "qr_ready");
         } catch (e) {
-          console.warn("QR render error:", e);
+          console.warn(`[gateway:${id}] QR render error:`, e);
         }
       }
 
-      if (connection === "connecting") {
-        if (status !== "qr_ready") status = "authenticating";
-      }
+      if (connection === "connecting" && s.status !== "qr_ready") setStatus(s, "authenticating");
 
       if (connection === "open") {
-        status = "ready";
-        qrBase64 = null;
-        lastConnectedAt = new Date();
-        const userJid = sock.user?.id || "";
-        const rawNum = userJid.replace(/@c\.us|:.*$/g, "").replace(/\D/g, "");
-        phoneNumber = rawNum ? (rawNum.length === 10 ? `+91 ${rawNum}` : `+${rawNum}`) : "Connected WhatsApp account";
-        console.log(`\n🟢 [OpenWA Gateway] WhatsApp Connected successfully! Linked phone number: ${phoneNumber}\n`);
+        s.qr = null;
+        s.lastConnectedAt = new Date();
+        const raw = (sock.user?.id || "").replace(/@.*$/, "").replace(/:.*$/, "").replace(/\D/g, "");
+        s.phone = raw ? (raw.length === 10 ? `+91 ${raw}` : `+${raw}`) : null;
+        setStatus(s, "ready");
+        console.log(`[gateway:${id}] Connected as ${s.phone ?? "unknown number"}`);
       }
 
       if (connection === "close") {
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        if (statusCode === DisconnectReason.loggedOut) {
-          status = "disconnected";
-          phoneNumber = null;
-          qrBase64 = null;
-          try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
-          console.log("\n🔴 [OpenWA Gateway] Logged out from WhatsApp Web.");
-        } else {
-          status = "disconnected";
-          console.log(`\n🟡 [OpenWA Gateway] Connection closed (code ${statusCode || 'unknown'}). Auto-reconnecting...`);
-          setTimeout(() => startWhatsAppSocket(), 4000);
+        const code = lastDisconnect?.error?.output?.statusCode;
+        s.qr = null;
+        s.phone = null;
+        if (code === DisconnectReason.loggedOut) {
+          fs.rmSync(authDirFor(id), { recursive: true, force: true });
+          s.sock = null;
+          setStatus(s, "disconnected");
+          console.log(`[gateway:${id}] Logged out from WhatsApp.`);
+        } else if (!s.stopped) {
+          setStatus(s, "disconnected");
+          console.log(`[gateway:${id}] Connection closed (code ${code ?? "unknown"}); reconnecting...`);
+          s.retry = setTimeout(() => startSession(id), 4000);
         }
       }
     });
   } catch (err) {
-    status = "failed";
-    console.error("❌ [OpenWA Gateway] Socket initialization error:", err);
+    s.sock = null;
+    setStatus(s, "failed");
+    console.error(`[gateway:${id}] Socket initialization error:`, err);
   }
+  return s;
+}
+
+async function stopSession(id, { logout }) {
+  const s = sessions.get(id);
+  if (s) {
+    s.stopped = true;
+    clearTimeout(s.retry);
+    if (s.sock) {
+      if (logout) await s.sock.logout().catch(() => {});
+      try { s.sock.end(undefined); } catch {}
+    }
+    s.sock = null;
+    s.qr = null;
+    s.phone = null;
+    setStatus(s, "disconnected");
+  }
+  if (logout) fs.rmSync(authDirFor(id), { recursive: true, force: true });
+}
+
+function snapshot(id) {
+  const s = sessions.get(id);
+  if (!s) {
+    // Known on disk but not running (e.g. gateway restarted) vs. never created.
+    if (!hasSavedCredentials(id)) return null;
+    return { sessionId: id, status: "stopped", connected: false, phoneNumber: null, qrCode: null, lastConnectedAt: null };
+  }
+  const ready = s.status === "ready";
+  return {
+    sessionId: id,
+    status: s.status,
+    connected: ready,
+    phoneNumber: ready ? s.phone : null,
+    qrCode: s.status === "qr_ready" ? s.qr : null,
+    lastConnectedAt: s.lastConnectedAt,
+  };
 }
 
 function parseJson(req) {
@@ -103,237 +203,126 @@ function parseJson(req) {
 }
 
 function sendResponse(res, statusCode, data) {
-  res.writeHead(statusCode, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, api-key",
-  });
+  res.writeHead(statusCode, { "Content-Type": "application/json" });
   res.end(JSON.stringify(data));
 }
 
+function keyMatches(provided) {
+  if (!provided) return false;
+  const given = String(provided).replace(/^Bearer\s+/i, "");
+  const a = Buffer.from(given);
+  const b = Buffer.from(API_KEY);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function toJid(raw) {
+  const digits = String(raw).replace(/\D/g, "");
+  return `${digits.length === 10 ? `91${digits}` : digits}@s.whatsapp.net`;
+}
+
 const server = http.createServer(async (req, res) => {
-  if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, api-key",
-    });
-    res.end();
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/api/health") {
+    sendResponse(res, 200, { status: "ok", service: "OpenWA multi-session gateway", sessions: sessions.size });
     return;
   }
 
-  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  const authHeader = req.headers["authorization"] || req.headers["x-api-key"] || req.headers["api-key"];
-
-  const isAuthorized =
-    !API_KEY ||
-    (authHeader && (authHeader.includes(API_KEY) || authHeader === API_KEY)) ||
-    url.searchParams.get("api_key") === API_KEY;
-
-  if (!isAuthorized && url.pathname !== "/" && url.pathname !== "/health" && url.pathname !== "/api/health") {
+  const provided = req.headers["x-api-key"] || req.headers["authorization"] || req.headers["api-key"];
+  if (!keyMatches(provided)) {
     sendResponse(res, 401, { error: "Unauthorized: Invalid OpenWA API Key" });
     return;
   }
 
-  // Health Endpoint
-  if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/api/health") {
-    sendResponse(res, 200, {
-      status: "ok",
-      service: "OpenWA REST API Gateway for AURCLEAN ERP",
-      sessionId: SESSION_NAME,
-      sessionStatus: status,
-      connected: status === "ready",
-      port: PORT,
-    });
-    return;
+  // POST /api/sessions  { sessionId }  — create/start
+  if (req.method === "POST" && url.pathname === "/api/sessions") {
+    const body = await parseJson(req);
+    const id = String(body.sessionId || body.name || "");
+    if (!SESSION_ID_RE.test(id)) return sendResponse(res, 400, { error: "Invalid sessionId" });
+    await startSession(id);
+    return sendResponse(res, 200, { success: true, ...snapshot(id) });
   }
 
-  // List Sessions Endpoint
   if (req.method === "GET" && url.pathname === "/api/sessions") {
-    sendResponse(res, 200, [
-      {
-        sessionId: SESSION_NAME,
-        status,
-        phoneNumber,
-        connected: status === "ready",
-      },
-    ]);
-    return;
+    return sendResponse(res, 200, [...sessions.keys()].map(snapshot).filter(Boolean));
   }
 
-  // Session Info Endpoint GET /api/sessions/{sessionId} or GET /api/session/status
-  if (req.method === "GET" && (url.pathname === `/api/sessions/${SESSION_NAME}` || url.pathname === "/api/session/status" || url.pathname === "/status")) {
-    sendResponse(res, 200, {
-      success: true,
-      sessionId: SESSION_NAME,
-      status,
-      state: status === "ready" ? "CONNECTED" : status.toUpperCase(),
-      connected: status === "ready",
-      phoneNumber,
-      qrCode: status === "qr_ready" ? qrBase64 : null,
-      me: status === "ready" && phoneNumber ? { id: phoneNumber.replace(/\D/g, "") + "@c.us", number: phoneNumber } : null,
-      lastConnectedAt,
+  const m = url.pathname.match(/^\/api\/sessions\/([^/]+)(?:\/([a-z]+))?$/);
+  if (!m) return sendResponse(res, 404, { error: "Endpoint not found on OpenWA Gateway" });
+  const [, id, action] = m;
+  if (!SESSION_ID_RE.test(id)) return sendResponse(res, 400, { error: "Invalid sessionId" });
+
+  if (req.method === "GET" && !action) {
+    const snap = snapshot(id);
+    return snap ? sendResponse(res, 200, { success: true, ...snap }) : sendResponse(res, 404, { error: "Session not found" });
+  }
+
+  if (req.method === "GET" && action === "qr") {
+    const snap = snapshot(id);
+    if (!snap) return sendResponse(res, 404, { error: "Session not found" });
+    if (snap.status === "qr_ready" && snap.qrCode) return sendResponse(res, 200, { success: true, ...snap });
+    return sendResponse(res, 400, {
+      success: false,
+      error: snap.status === "ready" ? "WhatsApp is already connected." : "QR code is not ready yet.",
+      status: snap.status,
     });
-    return;
   }
 
-  // Fetch QR Code Endpoint GET /api/sessions/{sessionId}/qr or /getQr
-  if (req.method === "GET" && (url.pathname === `/api/sessions/${SESSION_NAME}/qr` || url.pathname === "/getQr" || url.pathname === "/api/qr")) {
-    if (status === "qr_ready" && qrBase64) {
-      sendResponse(res, 200, {
-        success: true,
-        sessionId: SESSION_NAME,
-        status: "qr_ready",
-        qrCode: qrBase64,
-        qr: qrBase64,
-      });
-    } else {
-      sendResponse(res, 400, {
-        success: false,
-        error: status === "ready" ? "WhatsApp is already connected." : "QR code is not ready yet.",
-        status,
-      });
-    }
-    return;
+  if (req.method === "POST" && action === "start") {
+    await startSession(id);
+    return sendResponse(res, 200, { success: true, ...snapshot(id) });
   }
 
-  // Start / Connect Session Endpoint POST /api/sessions/{sessionId}/start or POST /api/sessions
-  if (req.method === "POST" && (url.pathname === `/api/sessions/${SESSION_NAME}/start` || url.pathname === "/api/sessions" || url.pathname === "/api/session/start")) {
-    if (status === "disconnected" || status === "failed" || !sock) {
-      startWhatsAppSocket();
-    }
-    sendResponse(res, 200, {
-      success: true,
-      sessionId: SESSION_NAME,
-      status,
-      message: "WhatsApp session connection initiated.",
-    });
-    return;
+  if ((req.method === "POST" && (action === "logout" || action === "stop")) || (req.method === "DELETE" && !action)) {
+    await stopSession(id, { logout: action !== "stop" });
+    console.log(`[gateway:${id}] Session ${action === "stop" ? "stopped" : "logged out and credentials cleared"}.`);
+    return sendResponse(res, 200, { success: true, sessionId: id, status: "disconnected" });
   }
 
-  // Disconnect / Logout Endpoint DELETE /api/sessions/{sessionId} or POST /api/sessions/{sessionId}/logout
-  if (req.method === "DELETE" || (req.method === "POST" && (url.pathname.includes("/logout") || url.pathname.includes("/terminate")))) {
-    if (sock) {
-      try { sock.logout(); } catch {}
-      try { sock.end(); } catch {}
-      sock = null;
+  if (req.method === "POST" && (action === "messages" || action === "files")) {
+    const s = sessions.get(id);
+    if (!s || s.status !== "ready" || !s.sock) {
+      return sendResponse(res, 409, { success: false, error: `WhatsApp session is not ready (status: ${s?.status ?? "unknown"})` });
     }
-    status = "disconnected";
-    phoneNumber = null;
-    qrBase64 = null;
-    try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
-    console.log("🔴 [OpenWA Gateway] Session disconnected and auth state cleared.");
-
-    sendResponse(res, 200, {
-      success: true,
-      sessionId: SESSION_NAME,
-      status: "disconnected",
-      message: "Session logged out.",
-    });
-    return;
-  }
-
-  // Send Text Message POST /api/sessions/{sessionId}/messages or POST /api/sendText
-  if (req.method === "POST" && (url.pathname.includes("/messages") || url.pathname === "/api/sendText" || url.pathname === "/sendText")) {
-    if (status !== "ready" || !sock) {
-      sendResponse(res, 400, { success: false, error: `WhatsApp is not connected (Current Status: ${status})` });
-      return;
-    }
-
     const body = await parseJson(req);
     const rawTo = body.to || body.chatId || body.phone;
-    const text = body.text || body.message || body.caption;
-
-    if (!rawTo || !text) {
-      sendResponse(res, 400, { success: false, error: "Missing required parameters: 'to' and 'text'" });
-      return;
-    }
-
-    const digits = String(rawTo).replace(/\D/g, "");
-    const formattedPhone = digits.length === 10 ? `91${digits}` : digits;
-    const jid = `${formattedPhone}@s.whatsapp.net`;
+    if (!rawTo) return sendResponse(res, 400, { success: false, error: "Missing required parameter: 'to'" });
+    const jid = toJid(rawTo);
 
     try {
-      const result = await sock.sendMessage(jid, { text });
-      const msgId = result?.key?.id || `WA-${Date.now()}`;
-      console.log(`💬 [OpenWA Gateway] Sent real WhatsApp message to ${formattedPhone} (ID: ${msgId})`);
-
-      sendResponse(res, 200, {
-        success: true,
-        id: msgId,
-        messageId: msgId,
-        to: formattedPhone,
-        status: "SENT",
-      });
+      let result;
+      if (action === "messages") {
+        const text = body.text || body.message;
+        if (!text) return sendResponse(res, 400, { success: false, error: "Missing required parameter: 'text'" });
+        result = await s.sock.sendMessage(jid, { text });
+      } else {
+        const base64Data = body.file || body.base64;
+        if (!base64Data) return sendResponse(res, 400, { success: false, error: "Missing required parameter: 'file' (base64)" });
+        result = await s.sock.sendMessage(jid, {
+          document: Buffer.from(String(base64Data).replace(/^data:.*?;base64,/, ""), "base64"),
+          mimetype: "application/pdf",
+          fileName: body.filename || "document.pdf",
+          caption: body.caption || body.text || "",
+        });
+      }
+      const msgId = result?.key?.id;
+      if (!msgId) return sendResponse(res, 502, { success: false, error: "WhatsApp did not return a message id" });
+      console.log(`[gateway:${id}] Sent ${action === "files" ? "document" : "message"} (ID: ${msgId})`);
+      return sendResponse(res, 200, { success: true, id: msgId, messageId: msgId, status: "SENT" });
     } catch (err) {
-      console.error("❌ Send text error:", err);
-      sendResponse(res, 500, { success: false, error: err?.message || "Failed to dispatch WhatsApp text message" });
+      console.error(`[gateway:${id}] Send error:`, err);
+      return sendResponse(res, 500, { success: false, error: err?.message || "Failed to dispatch WhatsApp message" });
     }
-    return;
-  }
-
-  // Send Document / PDF File POST /api/sessions/{sessionId}/files or POST /api/sendFile
-  if (req.method === "POST" && (url.pathname.includes("/files") || url.pathname === "/api/sendFile" || url.pathname === "/sendFile")) {
-    if (status !== "ready" || !sock) {
-      sendResponse(res, 400, { success: false, error: `WhatsApp is not connected (Current Status: ${status})` });
-      return;
-    }
-
-    const body = await parseJson(req);
-    const rawTo = body.to || body.chatId || body.phone;
-    const filename = body.filename || "document.pdf";
-    const caption = body.caption || body.text || "";
-    const base64Data = body.file || body.base64;
-
-    if (!rawTo || !base64Data) {
-      sendResponse(res, 400, { success: false, error: "Missing required parameters: 'to' and 'file' (base64)" });
-      return;
-    }
-
-    const digits = String(rawTo).replace(/\D/g, "");
-    const formattedPhone = digits.length === 10 ? `91${digits}` : digits;
-    const jid = `${formattedPhone}@s.whatsapp.net`;
-
-    try {
-      const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, "");
-      const buffer = Buffer.from(cleanBase64, "base64");
-
-      const result = await sock.sendMessage(jid, {
-        document: buffer,
-        mimetype: "application/pdf",
-        fileName: filename,
-        caption,
-      });
-
-      const msgId = result?.key?.id || `WA-FILE-${Date.now()}`;
-      console.log(`📄 [OpenWA Gateway] Sent real WhatsApp document (${filename}) to ${formattedPhone} (ID: ${msgId})`);
-
-      sendResponse(res, 200, {
-        success: true,
-        id: msgId,
-        messageId: msgId,
-        to: formattedPhone,
-        filename,
-        status: "SENT",
-      });
-    } catch (err) {
-      console.error("❌ Send file error:", err);
-      sendResponse(res, 500, { success: false, error: err?.message || "Failed to dispatch WhatsApp PDF document" });
-    }
-    return;
   }
 
   sendResponse(res, 404, { error: "Endpoint not found on OpenWA Gateway" });
 });
 
 server.listen(PORT, () => {
-  console.log(`\n==================================================`);
-  console.log(`🚀 OpenWA REST API Gateway for AURCLEAN ERP`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🔑 API Key: ${API_KEY}`);
-  console.log(`📱 Session ID: ${SESSION_NAME}`);
-  console.log(`==================================================\n`);
-
-  // Auto-start WhatsApp WebSocket listener
-  startWhatsAppSocket();
+  console.log(`OpenWA multi-session gateway listening on http://localhost:${PORT}`);
+  // Resume every session that already has a paired login.
+  fs.mkdirSync(AUTH_ROOT, { recursive: true });
+  const ids = new Set(fs.readdirSync(AUTH_ROOT, { withFileTypes: true }).filter((d) => d.isDirectory() && SESSION_ID_RE.test(d.name)).map((d) => d.name));
+  if (fs.existsSync(path.join(AUTH_ROOT, "creds.json"))) ids.add(LEGACY_SESSION_ID);
+  for (const id of ids) startSession(id);
 });

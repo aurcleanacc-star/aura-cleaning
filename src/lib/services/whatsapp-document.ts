@@ -203,6 +203,8 @@ export async function sendDocumentToWhatsApp(params: SendDocumentWhatsAppParams)
     orderId: orderId || undefined,
     documentName: pdfResult.fileName,
     documentBase64: pdfBase64,
+    documentType,
+    documentId,
     sentByUserId,
   });
 

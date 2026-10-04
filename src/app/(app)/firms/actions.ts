@@ -1,5 +1,6 @@
 "use server";
 
+import { sessionIdForFirm } from "@/lib/services/whatsapp";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
@@ -55,6 +56,11 @@ export async function createFirmAction(
           website: input.website ?? null,
           status: "ACTIVE",
         },
+      });
+
+      // Each firm gets its own (not yet connected) WhatsApp session record.
+      await tx.whatsAppSession.create({
+        data: { firmId: firm.id, provider: "openwa", sessionName: sessionIdForFirm(firm.id), displayName: firm.name },
       });
 
       const employeeCode = await nextEmployeeCode(tx);

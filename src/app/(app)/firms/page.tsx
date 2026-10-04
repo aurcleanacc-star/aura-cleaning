@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS } from "@/lib/rbac";
 import { requirePermission } from "@/lib/session";
+import { getAllFirmsWhatsAppStatus, type OpenWaSessionStatus } from "@/lib/services/whatsapp";
 import { CreateFirmDialog } from "@/app/(app)/firms/firm-dialogs";
 import { EnterFirmButton } from "@/app/(app)/firms/enter-firm-button";
 
@@ -20,6 +21,7 @@ interface FirmRow {
   name: string;
   city: string | null;
   status: string;
+  whatsapp: { status: OpenWaSessionStatus; phone: string | null };
   branches: number;
   users: number;
   createdAt: Date;
@@ -33,7 +35,11 @@ export default async function FirmsPage() {
     include: { _count: { select: { branches: true, users: true } } },
   });
 
+  // Live per-firm status from each firm's own gateway session.
+  const waByFirm = new Map((await getAllFirmsWhatsAppStatus()).map((r) => [r.firm.id, r.whatsapp]));
+
   const rows: FirmRow[] = firms.map((firm) => ({
+    whatsapp: { status: waByFirm.get(firm.id)?.status ?? "not_configured", phone: waByFirm.get(firm.id)?.phoneNumber ?? null },
     id: firm.id,
     code: firm.code,
     name: firm.name,
@@ -75,6 +81,7 @@ export default async function FirmsPage() {
       cell: (row) => row.users,
       hideOnMobile: true,
     },
+{      key: "whatsapp",      header: "WhatsApp",      cell: (row) => <WhatsAppCell status={row.whatsapp.status} phone={row.whatsapp.phone} />,      hideOnMobile: true,    },
     {
       key: "status",
       header: "Status",
@@ -116,6 +123,30 @@ export default async function FirmsPage() {
           getRowKey={(row) => row.id}
         />
       )}
+    </div>
+  );
+}
+
+const WHATSAPP_LABELS: Partial<Record<OpenWaSessionStatus, { label: string; dot: string }>> = {
+  ready: { label: "Connected", dot: "bg-emerald-500" },
+  qr_ready: { label: "QR Required", dot: "bg-amber-500" },
+  initializing: { label: "Connecting…", dot: "bg-sky-500" },
+  authenticating: { label: "Authenticating…", dot: "bg-sky-500" },
+  failed: { label: "Connection Failed", dot: "bg-rose-500" },
+  openwa_unavailable: { label: "Gateway Unreachable", dot: "bg-rose-500" },
+  disconnected: { label: "Disconnected", dot: "bg-muted-foreground" },
+  stopped: { label: "Disconnected", dot: "bg-muted-foreground" },
+};
+
+function WhatsAppCell({ status, phone }: { status: OpenWaSessionStatus; phone: string | null }) {
+  const cfg = WHATSAPP_LABELS[status] ?? { label: "Not Connected", dot: "bg-muted-foreground" };
+  return (
+    <div className="text-sm">
+      <span className="inline-flex items-center gap-1.5">
+        <span className={`size-2 rounded-full ${cfg.dot}`} />
+        {cfg.label}
+      </span>
+      {status === "ready" && <p className="text-xs text-muted-foreground">{phone ?? "Number unavailable"}</p>}
     </div>
   );
 }

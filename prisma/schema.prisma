@@ -446,6 +446,7 @@ model Firm {
   cashTransactions  CashTransaction[]
   whatsAppTemplates WhatsAppTemplate[]
   whatsAppSessions  WhatsAppSession[]
+  whatsAppLogs      WhatsAppLog[]
 
   @@index([status])
   @@map("firms")
@@ -2557,7 +2558,12 @@ enum WhatsAppMessageType {
 }
 
 model WhatsAppLog {
+  firmId        String
+  firm          Firm                  @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String                @id @default(cuid())
+  sessionId     String?
+  documentType  String?
+  documentId    String?
   customerId    String?
   customer      Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
   orderId       String?
@@ -2575,10 +2581,11 @@ model WhatsAppLog {
   sentAt        DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
+  @@index([firmId, sentAt])
   @@index([customerId])
   @@index([orderId])
   @@index([status])
-  @@index([sentAt])
+  @@index([externalId])
   @@map("whatsapp_logs")
 }
 
@@ -2601,15 +2608,22 @@ model WhatsAppSession {
   firmId String
   firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id              String    @id @default(cuid())
-  sessionName     String    @default("aurclean_session")
+  provider        String    @default("openwa")
+  // Gateway session identifier. Globally unique and derived from the firm
+  // (wa_<firmId>) so no two firms can ever address the same gateway session.
+  sessionName     String
+  displayName     String?
   isConnected     Boolean   @default(false)
   connectedNumber String?
   qrCode          String?   @db.Text
-  apiStatus       String    @default("DISCONNECTED")
+  apiStatus       String    @default("NOT_CONFIGURED")
   lastConnectedAt DateTime?
+  lastCheckedAt   DateTime?
+  createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  @@unique([firmId, sessionName])
+  @@unique([firmId, provider])
+  @@unique([sessionName])
   @@index([firmId])
   @@map("whatsapp_sessions")
 }
