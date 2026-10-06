@@ -10,6 +10,7 @@
  * Safe to re-run: it clears the transactional tables first.
  */
 import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import type {
@@ -26,7 +27,14 @@ import { categoryForTypeCode, categoryPrefix } from "../src/lib/garment-categori
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is not set");
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const pool = new Pool({
+  connectionString,
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 60000,
+});
+
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool as any) });
 
 /** Matches the fixed default-firm id created by the multi-tenant migration. */
 const FIRM_ID = "firm_aurclean_falnir";

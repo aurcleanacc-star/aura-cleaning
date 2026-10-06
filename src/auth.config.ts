@@ -5,6 +5,10 @@ import type { NextAuthConfig } from "next-auth";
  * database or Node-only imports so that it can power the middleware.
  */
 export const authConfig = {
+  secret:
+    process.env.AUTH_SECRET ??
+    process.env.NEXTAUTH_SECRET ??
+    "aurclean_production_fallback_secret_key_change_me",
   pages: {
     signIn: "/login",
     error: "/login",

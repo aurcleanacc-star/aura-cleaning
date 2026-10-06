@@ -59,63 +59,79 @@ export async function loginAction(
     }
   }
 
-  // Checked ahead of signIn so a deactivated firm gets its own explicit
-  // message rather than the generic "not recognised" — NextAuth's
-  // CredentialsSignin error from a null authorize() result doesn't carry a
-  // reason through cleanly, so the same check that lives in auth.ts's
-  // authorize() is repeated here purely to surface the right copy.
-  const candidate = await prisma.user.findUnique({
-    where: { accessCode },
-    select: { firm: { select: { status: true } } },
-  });
-  if (candidate?.firm && candidate.firm.status !== "ACTIVE") {
+  try {
+    const candidate = await prisma.user.findUnique({
+      where: { accessCode },
+      select: { firm: { select: { status: true } } },
+    });
+    if (candidate?.firm && candidate.firm.status !== "ACTIVE") {
+      return {
+        ok: false,
+        error: "This firm is currently inactive. Please contact the system administrator.",
+      };
+    }
+
+    try {
+      await signIn("credentials", { accessCode, redirect: false });
+    } catch (error) {
+      if (error instanceof AuthError) {
+        await recordAudit({
+          action: "LOGIN_FAILED",
+          entity: "User",
+          summary: "Failed sign-in attempt with an invalid access code",
+        }).catch(() => {});
+        return { ok: false, error: "That access code was not recognised" };
+      }
+      throw error;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { accessCode },
+      select: { id: true, branchId: true, firmId: true, role: true },
+    });
+
+    if (user) {
+      await recordAudit({
+        userId: user.id,
+        branchId: user.branchId,
+        firmId: user.firmId,
+        action: "LOGIN",
+        entity: "User",
+        entityId: user.id,
+        summary: "Signed in with an access code",
+      }).catch(() => {});
+    }
+
+    const landing = user ? ROLE_LANDING_PATH[user.role] : "/dashboard";
+    const target =
+      user?.role !== "SCANNER" &&
+      callbackUrl &&
+      callbackUrl.startsWith("/") &&
+      !callbackUrl.startsWith("//")
+        ? callbackUrl
+        : landing;
+
+    return { ok: true, data: { redirectTo: target } };
+  } catch (error) {
+    console.error("[Login Action Error]:", error);
+
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("DATABASE_URL") || msg.includes("connect") || msg.includes("Prisma") || msg.includes("pg")) {
+      return {
+        ok: false,
+        error: "Database connection failed. Please check DATABASE_URL in Vercel environment variables.",
+      };
+    }
+    if (msg.includes("AUTH_SECRET") || msg.includes("Secret")) {
+      return {
+        ok: false,
+        error: "Authentication configuration missing. Please ensure AUTH_SECRET is set in Vercel environment variables.",
+      };
+    }
+
     return {
       ok: false,
-      error: "This firm is currently inactive. Please contact the system administrator.",
+      error: "That access code was not recognised or a server error occurred. Please verify server logs.",
     };
   }
-
-  try {
-    await signIn("credentials", { accessCode, redirect: false });
-  } catch (error) {
-    if (error instanceof AuthError) {
-      await recordAudit({
-        action: "LOGIN_FAILED",
-        entity: "User",
-        summary: "Failed sign-in attempt with an invalid access code",
-      });
-      return { ok: false, error: "That access code was not recognised" };
-    }
-    throw error;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { accessCode },
-    select: { id: true, branchId: true, firmId: true, role: true },
-  });
-
-  if (user) {
-    await recordAudit({
-      userId: user.id,
-      branchId: user.branchId,
-      firmId: user.firmId,
-      action: "LOGIN",
-      entity: "User",
-      entityId: user.id,
-      summary: "Signed in with an access code",
-    });
-  }
-
-  // Scanner is a dedicated, single-purpose surface: it always opens straight
-  // to the scan workspace, whatever page originally sent someone to sign in.
-  const landing = user ? ROLE_LANDING_PATH[user.role] : "/dashboard";
-  const target =
-    user?.role !== "SCANNER" &&
-    callbackUrl &&
-    callbackUrl.startsWith("/") &&
-    !callbackUrl.startsWith("//")
-      ? callbackUrl
-      : landing;
-
-  return { ok: true, data: { redirectTo: target } };
 }

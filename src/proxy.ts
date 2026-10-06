@@ -15,21 +15,26 @@ const PUBLIC_PATHS = ["/login", "/forbidden"];
  * Node, not edge, so this file may touch Node APIs if it ever needs to.
  */
 export default auth(function proxy(request) {
-  const { pathname } = request.nextUrl;
-  const isLoggedIn = Boolean(request.auth?.user);
-  const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+  try {
+    const { pathname } = request.nextUrl;
+    const isLoggedIn = Boolean(request.auth?.user);
+    const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
-  if (!isLoggedIn && !isPublic) {
-    const loginUrl = new URL("/login", request.nextUrl.origin);
-    if (pathname !== "/") loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+    if (!isLoggedIn && !isPublic) {
+      const loginUrl = new URL("/login", request.nextUrl.origin);
+      if (pathname !== "/") loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (isLoggedIn && pathname === "/login") {
+      return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error("[Proxy Execution Error]:", error);
+    return NextResponse.next();
   }
-
-  if (isLoggedIn && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
-  }
-
-  return NextResponse.next();
 });
 
 export const config = {

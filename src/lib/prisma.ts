@@ -1,3 +1,4 @@
+import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
@@ -13,8 +14,19 @@ const createPrismaClient = (): PrismaClient => {
     );
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
+  const needsSsl = connectionString.includes("sslmode=") || isProduction;
+
+  const pool = new Pool({
+    connectionString,
+    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    max: isProduction ? 10 : 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
+
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
+    adapter: new PrismaPg(pool as any),
     log:
       process.env.NODE_ENV === "development"
         ? ["warn", "error"]

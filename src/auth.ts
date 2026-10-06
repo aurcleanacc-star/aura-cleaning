@@ -22,49 +22,54 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         accessCode: { label: "Access code", type: "text" },
       },
       async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
+        try {
+          const parsed = credentialsSchema.safeParse(raw);
+          if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { accessCode: parsed.data.accessCode },
-          include: {
-            branch: { select: { id: true, name: true, code: true } },
-            firm: { select: { id: true, name: true, status: true } },
-          },
-        });
+          const user = await prisma.user.findUnique({
+            where: { accessCode: parsed.data.accessCode },
+            include: {
+              branch: { select: { id: true, name: true, code: true } },
+              firm: { select: { id: true, name: true, status: true } },
+            },
+          });
 
-        if (!user || user.status !== "ACTIVE") return null;
+          if (!user || user.status !== "ACTIVE") return null;
 
-        // A firm's users cannot sign in while their firm is deactivated —
-        // existing data stays intact, but no session can be created.
-        if (user.firm && user.firm.status !== "ACTIVE") return null;
+          // A firm's users cannot sign in while their firm is deactivated —
+          // existing data stays intact, but no session can be created.
+          if (user.firm && user.firm.status !== "ACTIVE") return null;
 
-        const permissions = await resolvePermissions(user.id, user.role);
+          const permissions = await resolvePermissions(user.id, user.role);
 
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        });
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+          });
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-          branchId: user.branchId,
-          branchName: user.branch?.name ?? null,
-          branchCode: user.branch?.code ?? null,
-          employeeCode: user.employeeCode,
-          permissions,
-          firmId: user.firmId,
-          firmName: user.firm?.name ?? null,
-          // A regular firm user's active firm is always their own, fixed
-          // firm — never switchable. A PLATFORM_ADMIN starts with none
-          // active until they explicitly enter one from the Firms module.
-          activeFirmId: isPlatformRole(user.role) ? null : user.firmId,
-          activeFirmName: isPlatformRole(user.role) ? null : (user.firm?.name ?? null),
-        };
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            role: user.role,
+            branchId: user.branchId,
+            branchName: user.branch?.name ?? null,
+            branchCode: user.branch?.code ?? null,
+            employeeCode: user.employeeCode,
+            permissions,
+            firmId: user.firmId,
+            firmName: user.firm?.name ?? null,
+            // A regular firm user's active firm is always their own, fixed
+            // firm — never switchable. A PLATFORM_ADMIN starts with none
+            // active until they explicitly enter one from the Firms module.
+            activeFirmId: isPlatformRole(user.role) ? null : user.firmId,
+            activeFirmName: isPlatformRole(user.role) ? null : (user.firm?.name ?? null),
+          };
+        } catch (err) {
+          console.error("[NextAuth Authorize Error]:", err);
+          throw err;
+        }
       },
     }),
   ],
